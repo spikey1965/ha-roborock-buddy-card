@@ -7,7 +7,7 @@
 // and a schedule of cleaning programmes saved as normal Home Assistant automations.
 //
 // type: custom:roborock-buddy-card   (every option is optional - see the README)
-const ROBOROCK_BUDDY_VERSION = "0.1.0";
+const ROBOROCK_BUDDY_VERSION = "0.1.1";
 
 // Roborock's own replacement intervals, in hours
 const LIFE = { main_brush: ["Main brush", 300, "mdi:brush"], side_brush: ["Side brush", 200, "mdi:fan"], filter: ["Filter", 150, "mdi:air-filter"],
@@ -62,13 +62,15 @@ const artRobot = (st, cx, cy, r, mood) => {
   s += `<ellipse cx="${cx}" cy="${ty}" rx="${tr}" ry="${tr * 0.42}" fill="${"#4d5a6c"}" ${line}/>`;
   s += `<ellipse class="lidar" cx="${cx}" cy="${ty}" rx="${tr * 0.38}" ry="${tr * 0.16}"/>`;
   {   // cartoon face on the bumper
-    const ey = cy + ry + h * 0.42, ex = r * 0.24;
+    const ey = cy + ry + h * 0.42, ex = r * 0.24, er = r > 40 ? 4.6 : 3;   // bigger eyes on the big out-of-dock robot
     if (mood === "bad") s += `<path d="M${cx - ex - 3} ${ey - 3}l6 6M${cx - ex + 3} ${ey - 3}l-6 6M${cx + ex - 3} ${ey - 3}l6 6M${cx + ex + 3} ${ey - 3}l-6 6" stroke="${ART_INK}" stroke-width="2.2" stroke-linecap="round"/>
       <path d="M${cx - 6} ${ey + 8}q6 -4 12 0" fill="none" stroke="${ART_INK}" stroke-width="2" stroke-linecap="round"/>`;
     else if (mood === "sleep") s += `<path d="M${cx - ex - 4} ${ey}q4 3 8 0M${cx + ex - 4} ${ey}q4 3 8 0" fill="none" stroke="${ART_INK}" stroke-width="2.2" stroke-linecap="round"/>
       <path d="M${cx - 5} ${ey + 6}q5 3 10 0" fill="none" stroke="${ART_INK}" stroke-width="2" stroke-linecap="round"/>`;
-    else s += `<ellipse cx="${cx - ex}" cy="${ey}" rx="3" ry="3.8" fill="${ART_INK}"/><ellipse cx="${cx + ex}" cy="${ey}" rx="3" ry="3.8" fill="${ART_INK}"/>
-      <circle cx="${cx - ex + 1}" cy="${ey - 1.3}" r="1" fill="#fff"/><circle cx="${cx + ex + 1}" cy="${ey - 1.3}" r="1" fill="#fff"/>
+    // open eyes blink (lids squash shut and spring back) and glance left/right now and then
+    else s += `<g class="eyes"><g class="look">
+      <ellipse cx="${cx - ex}" cy="${ey}" rx="${er}" ry="${er * 1.27}" fill="${ART_INK}"/><ellipse cx="${cx + ex}" cy="${ey}" rx="${er}" ry="${er * 1.27}" fill="${ART_INK}"/>
+      <circle cx="${cx - ex + er / 3}" cy="${ey - er * 0.43}" r="${er / 3}" fill="#fff"/><circle cx="${cx + ex + er / 3}" cy="${ey - er * 0.43}" r="${er / 3}" fill="#fff"/></g></g>
       <path d="M${cx - 6} ${ey + 6}q6 5 12 0" fill="none" stroke="${ART_INK}" stroke-width="2" stroke-linecap="round"/>`;
   }
   return s;
@@ -170,6 +172,12 @@ button.nametag { border:0; cursor:pointer; font-family:inherit; } button.nametag
 @keyframes puff { 0% { opacity:0; transform:translate(0,0) scale(.5); } 20% { opacity:1; } 100% { opacity:0; transform:translate(var(--dx),-12px) scale(1.25); } }
 .pic .fx.bolt, .pic .led, .pic .fx.alertb { animation:blink 1.6s ease-in-out infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
+.pic .eyes { transform-box:fill-box; transform-origin:center; animation:eyeblink 4.7s ease-in-out infinite; } .pic .eyes .look { animation:eyelook 11s ease-in-out infinite; }
+.run .pic .eyes .look { animation:eyerun 2.6s ease-in-out infinite alternate; }   /* out cleaning: eyes look the way it is roaming */
+@keyframes eyeblink { 0%, 86%, 100% { transform:scaleY(1); } 88% { transform:scaleY(.08); } 90% { transform:scaleY(1.05); } 92% { transform:scaleY(1); } }
+@keyframes eyerun { from { transform:translateX(-2.4px); } to { transform:translateX(2.4px); } }
+@keyframes eyelook { 0%, 20%, 50%, 70%, 100% { transform:translateX(0); } 25%, 42% { transform:translateX(-2.2px); } 75%, 90% { transform:translateX(2.2px); } }
+@media (prefers-reduced-motion: reduce) { .pic .eyes, .pic .eyes .look, .run .pic .eyes .look { animation:none; } }
 @keyframes roam { from { transform:translateX(-10px); } to { transform:translateX(14px); } }
 @keyframes fade { from { opacity:.15; } to { opacity:.7; } }
 @keyframes rise { 0% { opacity:0; transform:translateY(6px); } 40% { opacity:1; } 100% { opacity:0; transform:translateY(-8px); } }
