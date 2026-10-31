@@ -1,0 +1,19 @@
+name: Feature request
+description: An idea for the card.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        I build and look after this card in my spare time, so I can't promise every idea, but they're all read. Pull requests are very welcome.
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like the card to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it help you?
+      description: A screenshot or a sketch is great too.
