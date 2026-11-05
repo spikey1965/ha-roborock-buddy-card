@@ -8,7 +8,7 @@ A friendly dashboard card for Roborock robot vacuums in Home Assistant: a cartoo
 
 ![Roborock Buddy Card: cartoon robot on its dock, dock and care status, rooms, map, controls and the schedule](images/card.png)
 
-> **Beta (0.1.0).** It runs every day on my own Roborock Qrevo S. The Q7 M5 family is supported in the code but hasn't been tried on a real one yet. If you try it, please [open an issue](https://github.com/spikey1965/ha-roborock-buddy-card/issues) with what works and what doesn't.
+> **Beta (0.1.0).** It runs every day on my own Roborock Qrevo S and Q7 L5+. If you try it on another model, please [open an issue](https://github.com/spikey1965/ha-roborock-buddy-card/issues) with what works and what doesn't.
 
 ## What it does
 
@@ -46,7 +46,7 @@ Each programme you make is saved as a **normal Home Assistant automation** (name
 | Robot | Status |
 |---|---|
 | Qrevo, QV, S and Saros series | Tested on a Qrevo S (mop-wash dock) |
-| Q7 M5 / M5+ / L5 family | Supported in the code (different room-clean command, no "emptying" status). Not tried on a real one yet |
+| Q7 M5 / M5+ / L5 family | Tested on a real Q7 L5+ (add `dock: empty`). Different room-clean command, no "emptying" status |
 | Other Q-series | Should work if the Roborock integration supports your robot |
 
 ## Install
