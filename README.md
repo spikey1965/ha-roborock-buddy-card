@@ -8,7 +8,7 @@ A friendly dashboard card for Roborock robot vacuums in Home Assistant: a cartoo
 
 ![Roborock Buddy Card: cartoon robot on its dock, dock and care status, rooms, map, controls and the schedule](images/card.png)
 
-> **Beta (0.1.0).** It runs every day on my own Roborock Qrevo S and Q7 L5+. If you try it on another model, please [open an issue](https://github.com/spikey1965/ha-roborock-buddy-card/issues) with what works and what doesn't.
+> **Beta (0.1.1).** It runs every day on my own Roborock Qrevo S and Q7 L5+. If you try it on another model, please [open an issue](https://github.com/spikey1965/ha-roborock-buddy-card/issues) with what works and what doesn't.
 
 ## What it does
 
