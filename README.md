@@ -51,9 +51,19 @@ Each programme you make is saved as a **normal Home Assistant automation** (name
 
 ## Install
 
-### HACS (easiest)
+### Marketplace (easiest)
 
-Click the **Open in HACS** button above, then **Download**. Or in HACS: **⋮ → Custom repositories**, paste `https://github.com/spikey1965/ha-roborock-buddy-card`, type **Dashboard**, **Add**, then find **Roborock Buddy Card** and download it. Refresh your browser.
+Click the button above. If asked, connect GitHub and click **Add**, then click **Install**. Or do it by hand:
+
+1. Go to **Settings → Marketplace** and click **Add from link**. This asks you to connect GitHub.
+2. Paste `https://github.com/spikey1965/ha-roborock-buddy-card` and choose the type **Dashboard** if asked.
+3. Find **Roborock Buddy Card** under **New**, open it and click **Install**. Refresh your browser.
+
+Because it's a beta, Marketplace shows a short code such as `f5fa069` instead of a version number, which is normal. To get the numbered beta instead, open the **⋮ menu → Include pre-releases → Include** before you install.
+
+The first time you use Marketplace, tick **I understand the risks and agree** and click **Continue**.
+
+**On a version older than 2026.11?** Marketplace is still called HACS there. Use **Download** in place of Install and **⋮ → Custom repositories** in place of Add from link.
 
 ### By hand
 
