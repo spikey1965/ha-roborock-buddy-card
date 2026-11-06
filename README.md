@@ -68,7 +68,7 @@ The first time you use Marketplace, tick **I understand the risks and agree** an
 ### By hand
 
 1. Download `roborock-buddy-card.js` from the [latest release](https://github.com/spikey1965/ha-roborock-buddy-card/releases) and copy it to `config/www/roborock-buddy-card/`.
-2. **Settings → Dashboards → ⋮ → Resources → Add resource**: `/local/roborock-buddy-card/roborock-buddy-card.js?v=0.1.0`, type **JavaScript module**.
+2. **Settings → Dashboards → ⋮ → Resources → Add resource**: `/local/roborock-buddy-card/roborock-buddy-card.js?v=0.1.1`, type **JavaScript module**.
 3. Refresh your browser.
 
 ## Add the card
