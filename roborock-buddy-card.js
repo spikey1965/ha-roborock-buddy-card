@@ -3,11 +3,11 @@
 // MIT licence. Made by My Media Build.
 //
 // A dashboard card for Roborock vacuums on Home Assistant's own Roborock integration: a cartoon of your robot and its dock
-// that follows what it's doing, the live map, tap-to-pick rooms, controls, mop and dock status, brush and filter life,
+// that follows what it's doing, the live map, tap-to-pick rooms or drawn zones, controls, mop and dock status, brush and filter life,
 // and a schedule of cleaning programmes saved as normal Home Assistant automations.
 //
 // type: custom:roborock-buddy-card   (every option is optional - see the README)
-const ROBOROCK_BUDDY_VERSION = "0.1.1";
+const ROBOROCK_BUDDY_VERSION = "0.2.0";
 
 // Roborock's own replacement intervals, in hours
 const LIFE = { main_brush: ["Main brush", 300, "mdi:brush"], side_brush: ["Side brush", 200, "mdi:fan"], filter: ["Filter", 150, "mdi:air-filter"],
@@ -220,6 +220,15 @@ button ha-icon { --mdc-icon-size:20px; }
 .go { width:100%; margin-top:12px; padding:12px; display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:800;
   background:var(--fg); border:0; color:#0b1a2e; box-shadow:0 2px 8px #0003; }
 .go:disabled { background:#ffffff14; color:var(--muted); box-shadow:none; opacity:1; }
+.gorow { display:flex; gap:8px; margin-top:12px; } .gorow .go { margin-top:0; flex:1; min-width:0; }
+.zbtn { flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:0 14px; font-size:13px; font-weight:800; }
+.zbtn.on { background:#ffd84d; color:#0b1a2e; border-color:transparent; }
+.map.zoning { cursor:crosshair; touch-action:none; outline:2px solid #ffd84d; outline-offset:-2px; }
+.map .zone { position:absolute; border:2px solid #ffd84d; background:#ffd84d38; border-radius:4px; pointer-events:none; box-sizing:border-box; }
+.map .zone b { position:absolute; top:-2px; right:-2px; width:24px; height:24px; border-radius:0 2px 0 8px; background:#ffd84d; color:#0b1a2e; display:grid; place-items:center;
+  font-size:16px; line-height:1; cursor:pointer; pointer-events:auto; } .map .zone.draft { border-style:dashed; }
+.map .hint { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); display:flex; align-items:center; gap:8px; max-width:calc(100% - 20px); padding:6px 8px 6px 12px; border-radius:999px; background:#0b1a2ee8; color:#fff; font-size:13px; font-weight:700; white-space:nowrap; }
+.map .hint[hidden] { display:none; } .map .hint span { overflow:hidden; text-overflow:ellipsis; } .map .hint button { all:unset; cursor:pointer; padding:3px 10px; border-radius:999px; background:#ffffff26; font-size:12px; font-weight:700; color:#fff; }
 .acts { display:grid; grid-template-columns:1.6fr 1fr 1fr; gap:8px; }
 .acts button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:10px 6px; font-size:13px; font-weight:700; }
 .acts .main { flex-direction:row; gap:8px; font-size:16px; font-weight:800; background:var(--fg); color:#0b1a2e; border-color:var(--fg); }
@@ -265,6 +274,33 @@ const findVac = (h, find) => {
     const d = h.devices?.[h.entities?.[e]?.device_id] || {};
     return [e, h.states[e].attributes.friendly_name, d.name, d.name_by_user, d.model].some(x => x && re.test(x));
   }) || null;
+};
+
+// zone cleaning helpers
+const ZONE_KEY = "robot_vac_zone_anchor", ZONE_MAX = 5;   // Roborock takes up to 5 zones in one go
+// Home Assistant draws the robot on its map as a white disc. Finding it, plus the robot's own position (roborock.get_vacuum_current_position),
+// lines the picture up with the robot's millimetre coordinates, so a box drawn on the map can be sent as a zone. Returns the disc's
+// centre in picture pixels and the millimetres per pixel (map units are 50 mm, the picture is drawn at a whole-number scale).
+const findRobot = (d, w, h) => {
+  const seen = new Uint8Array(w * h), white = q => d[q * 4] === 255 && d[q * 4 + 1] === 255 && d[q * 4 + 2] === 255 && d[q * 4 + 3] === 255;
+  let best = null;
+  for (let p = 0; p < w * h; p++) {
+    if (seen[p] || !white(p)) continue;
+    let n = 0, x0 = w, x1 = 0, y0 = h, y1 = 0; const st = [p]; seen[p] = 1;
+    while (st.length) {
+      const q = st.pop(), x = q % w, y = (q - x) / w; n++;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      if (x > 0 && !seen[q - 1] && white(q - 1)) { seen[q - 1] = 1; st.push(q - 1); }
+      if (x < w - 1 && !seen[q + 1] && white(q + 1)) { seen[q + 1] = 1; st.push(q + 1); }
+      if (y > 0 && !seen[q - w] && white(q - w)) { seen[q - w] = 1; st.push(q - w); }
+      if (y < h - 1 && !seen[q + w] && white(q + w)) { seen[q + w] = 1; st.push(q + w); }
+    }
+    const bw = x1 - x0 + 1, bh = y1 - y0 + 1;   // a round, mostly filled blob: the robot (thin white lines and rings don't count)
+    if (bw >= 9 && bw <= 120 && Math.abs(bw - bh) <= 3 && n > bw * bh * 0.45 && (!best || n > best.n)) best = { n, x: (x0 + x1) / 2, y: (y0 + y1) / 2, bw };
+  }
+  if (!best) return null;
+  const scale = Math.max(1, Math.round(best.bw / 10.5));   // the disc's white middle is about 10.5 px across per unit of scale
+  return { x: best.x, y: best.y, mm: 50 / scale };
 };
 
 class RobotVacCard extends HTMLElement {
@@ -329,7 +365,7 @@ class RobotVacCard extends HTMLElement {
         <div class="panel"><div class="scene" id="scene"><div class="sceneart"><button class="nametag" id="nameBtn" title="Name your robot"><ha-icon icon="mdi:robot-vacuum"></ha-icon><span id="robotName"></span><ha-icon class="pen" icon="mdi:pencil"></ha-icon></button><div id="art"></div></div>
           <div class="sceneinfo"><div id="dockbox" hidden><div class="lbl">Dock</div><div class="chips" id="dock2"></div></div><div class="lbl">Care</div><div class="life" id="life"></div></div></div>
           <div class="lbl">Rooms</div><div class="rooms" id="rooms"><span class="setup">Loading rooms…</span></div>
-          <button class="go" id="clean" disabled><ha-icon icon="mdi:gesture-tap"></ha-icon><span id="cleanT">Pick rooms to clean</span></button>
+          <div class="gorow"><button class="go" id="clean" disabled><ha-icon icon="mdi:gesture-tap"></ha-icon><span id="cleanT">Pick rooms to clean</span></button><button class="zbtn" id="zoneBtn" hidden title="Draw boxes on the map and clean just those"><ha-icon icon="mdi:selection-drag"></ha-icon><span>Zone</span></button></div>
           <div class="map" id="map"><span class="none">No map yet. Let the robot finish a mapping run${this._config.where ? " " + esc(this._config.where) : ""}.</span></div></div>
         <div class="ctrls">
           <div class="acts">
@@ -363,7 +399,13 @@ class RobotVacCard extends HTMLElement {
     r.getElementById("dock").onclick = vac("return_to_base");
     r.getElementById("nameBtn").onclick = () => this._nameOpen();
     r.getElementById("find").onclick = vac("locate");
+    const mp = r.getElementById("map");
+    mp.addEventListener("pointerdown", e => this._zoneDown(e)); mp.addEventListener("pointermove", e => this._zoneMove(e));
+    ["pointerup", "pointercancel"].forEach(t => mp.addEventListener(t, e => this._zoneUp(e)));
+    if (window.ResizeObserver) new ResizeObserver(() => this._zoneDraw()).observe(mp);
+    r.getElementById("zoneBtn").onclick = () => this._zoneMode(!this._zoning);
     r.getElementById("clean").onclick = async () => {
+      if (this._zoning) return this._zoneClean();
       const segs = [...this._sel].map(Number);
       if (!(await this._prep())) return;
       this._call("vacuum", "send_command", this._roomCmd(segs, 1), { entity_id: this._v })
@@ -426,12 +468,137 @@ class RobotVacCard extends HTMLElement {
     } else {
       box.innerHTML = this._rooms.map(([id, n]) => `<button data-id="${esc(id)}" class="${this._sel.has(id) ? "on" : ""}"><ha-icon icon="${this._sel.has(id) ? "mdi:check-circle" : roomIcon(n)}"></ha-icon>${esc(n)}</button>`).join("");
       box.querySelectorAll("button").forEach(b => b.onclick = () => {
+        if (this._zoning) { this._zoning = false; this._zones = []; this._draft = null; this._zoneUI(); this.shadowRoot.getElementById("maphint")?.setAttribute("hidden", ""); }
         this._sel.has(b.dataset.id) ? this._sel.delete(b.dataset.id) : this._sel.add(b.dataset.id); this._drawRooms();
       });
     }
     const n = this._sel.size;
+    if (this._zoning) return this._zoneUI();
     go.disabled = !n; r.getElementById("cleanT").textContent = n ? `Clean ${n} room${n > 1 ? "s" : ""}` : "Pick rooms to clean";
     go.querySelector("ha-icon").setAttribute("icon", n ? "mdi:play-circle" : "mdi:gesture-tap");
+  }
+
+  // ---- zone cleaning: drag boxes on the map, sent as app_zoned_clean in the robot's own millimetres ----
+  // zones: false hides it. Not on the Q7 family (no zone command in Home Assistant), or when the map's pixels can't be read.
+  _zoneBtn() {
+    const b = this.shadowRoot?.getElementById("zoneBtn"); if (!b) return;
+    const off = this._config.zones === false || this._noZones || this._isQ7() || !this._mapCv;
+    b.hidden = off; if (off && this._zoning) this._zoneMode(false);
+  }
+  _zoneMode(on) {
+    this._zoning = on; this._zones = []; this._draft = null; this._zoneMsg = "";
+    if (on) { this._sel.clear(); this._linkRoom = null; this.shadowRoot.getElementById("err").textContent = ""; }
+    this._zoneUI();   // outline, boxes and hint while on; clears them when off
+    if (!on) this.shadowRoot.getElementById("maphint")?.setAttribute("hidden", "");
+    if (this._rooms) this._drawRooms();   // button text back to rooms, room hint if one is due
+    if (on) this._zoneAnchor();
+  }
+  // line the map picture up with the robot: its disc on the picture + where it says it is. Only while it's standing still (the picture
+  // lags up to 30 s while it moves) and on this card's map; otherwise use the last line-up saved for this map, if the picture is the same size.
+  async _zoneAnchor() {
+    const h = this._hass, st = h.states[this._v]?.state, key = `${this._v}|${this._mapEnt}`;
+    if (!this._anchors) this._anchors = await h.callWS({ type: "frontend/get_user_data", key: ZONE_KEY }).then(x => x?.value || {}).catch(() => ({}));
+    const still = !["cleaning", "returning"].includes(st);
+    const onMap = !this._config.map || this._st(this._find("select", /selected_map/))?.state === this._config.map;
+    this._anchor = null;
+    if (still && onMap && this._robotPx) {
+      try {
+        const res = await h.callWS({ type: "call_service", domain: "roborock", service: "get_vacuum_current_position", target: { entity_id: this._v }, return_response: true });
+        const p = res?.response?.[this._v], k = this._robotPx;
+        if (p && isFinite(p.x) && isFinite(p.y)) {
+          this._anchor = { x: p.x - k.x * k.mm, y: p.y + k.y * k.mm, mm: k.mm, w: this._imgW, h: this._imgH };
+          this._anchors = { ...this._anchors, [key]: this._anchor };
+          h.callWS({ type: "frontend/set_user_data", key: ZONE_KEY, value: this._anchors }).catch(() => {});
+        }
+      } catch (x) {
+        if (/not.?supported/i.test(x?.message || x?.code || "")) {
+          this._noZones = true; this._zoneBtn(); this.shadowRoot.getElementById("err").textContent = "This robot can't do zone cleaning from Home Assistant."; return;
+        }
+      }
+    }
+    if (!this._anchor) { const a = this._anchors[key]; if (a && a.w === this._imgW && a.h === this._imgH) this._anchor = a; }
+    if (!this._zoning) return;
+    if (!this._anchor) this._zoneMsg = !still ? "Wait till it stops, then press Zone again" : !onMap ? `Load ${this._config.map} first` : "Can't find the robot on the map";
+    this._zoneUI();
+  }
+  _zoneUI() {
+    const r = this.shadowRoot, go = r.getElementById("clean"), box = r.getElementById("map"), hint = r.getElementById("maphint"), n = (this._zones || []).length;
+    r.getElementById("zoneBtn").classList.toggle("on", !!this._zoning);
+    box.classList.toggle("zoning", !!this._zoning);
+    if (!this._zoning) { this._zoneDraw(); return; }
+    go.disabled = !n || !this._anchor;
+    r.getElementById("cleanT").textContent = n ? `Clean ${n} zone${n > 1 ? "s" : ""}` : "Draw a box on the map";
+    go.querySelector("ha-icon").setAttribute("icon", n ? "mdi:play-circle" : "mdi:selection-drag");
+    if (hint) {
+      const msg = this._zoneMsg || (n >= ZONE_MAX ? `That's ${ZONE_MAX}, the most it takes` : n ? "Drag another, or press Clean" : "Drag a box over the bit to clean");
+      hint.className = "hint"; hint.hidden = false;
+      hint.innerHTML = `<span>${esc(msg)}</span><button id="zoneno">Cancel</button>`;
+      hint.querySelector("#zoneno").onclick = e => { e.stopPropagation(); this._zoneMode(false); };
+    }
+    this._zoneDraw();
+  }
+  // pointer on the map -> picture pixels (the trimmed, maybe turned picture the card shows), clamped to the picture
+  _cvPt(e) {
+    const cv = this._mapCv, img = this.shadowRoot.querySelector("#map img"); if (!cv || !img) return null;
+    const b = img.getBoundingClientRect(), z = Math.min(b.width / cv.width, b.height / cv.height);
+    const x = (e.clientX - b.left - (b.width - cv.width * z) / 2) / z, y = (e.clientY - b.top - (b.height - cv.height * z) / 2) / z;
+    return [Math.max(0, Math.min(cv.width, x)), Math.max(0, Math.min(cv.height, y))];
+  }
+  // shown picture pixels -> Home Assistant's picture pixels (undo map_rotate, add the trimmed border back)
+  _toOrig(X, Y) {
+    const c = this._crop; let u = X, v = Y;
+    if (c.rot === 90) { u = Y; v = c.h - X; } else if (c.rot === 180) { u = c.w - X; v = c.h - Y; } else if (c.rot === 270) { u = c.w - Y; v = X; }
+    return [u + c.x0, v + c.y0];
+  }
+  _zoneDown(e) {
+    if (!this._zoning || e.button > 0 || e.target.closest?.("button, b") || (this._zones || []).length >= ZONE_MAX) return;
+    const p = this._cvPt(e); if (!p) return;
+    this._draft = { x0: p[0], y0: p[1], x1: p[0], y1: p[1] };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {}
+    e.preventDefault(); this._zoneDraw();
+  }
+  _zoneMove(e) { if (!this._draft) return; const p = this._cvPt(e); if (!p) return; this._draft.x1 = p[0]; this._draft.y1 = p[1]; this._zoneDraw(); }
+  _zoneUp() {
+    const d = this._draft; if (!d) return; this._draft = null;
+    const min = 300 / (this._anchor?.mm || this._robotPx?.mm || 12.5);   // at least 30 cm a side
+    if (Math.abs(d.x1 - d.x0) >= min && Math.abs(d.y1 - d.y0) >= min) {
+      this._zones.push({ x0: Math.min(d.x0, d.x1), y0: Math.min(d.y0, d.y1), x1: Math.max(d.x0, d.x1), y1: Math.max(d.y0, d.y1) }); this._zoneMsg = this._anchor ? "" : this._zoneMsg;
+    } else if (Math.abs(d.x1 - d.x0) + Math.abs(d.y1 - d.y0) > 4) this._zoneMsg = "Too small. Drag a bigger box";
+    this._zoneUI();
+  }
+  _zoneDraw() {
+    const box = this.shadowRoot?.getElementById("map"); if (!box) return;
+    box.querySelectorAll(".zone").forEach(z => z.remove());
+    const img = box.querySelector("img"), cv = this._mapCv;
+    if (!this._zoning || !img || !cv) return;
+    const b = img.getBoundingClientRect(), m = box.getBoundingClientRect(), z = Math.min(b.width / cv.width, b.height / cv.height);
+    const ox = b.left - m.left + (b.width - cv.width * z) / 2, oy = b.top - m.top + (b.height - cv.height * z) / 2;
+    [...this._zones.map((q, i) => [q, i]), ...(this._draft ? [[this._draft, -1]] : [])].forEach(([q, i]) => {
+      const el = document.createElement("div"); el.className = `zone${i < 0 ? " draft" : ""}`;
+      Object.assign(el.style, { left: `${ox + Math.min(q.x0, q.x1) * z}px`, top: `${oy + Math.min(q.y0, q.y1) * z}px`,
+        width: `${Math.abs(q.x1 - q.x0) * z}px`, height: `${Math.abs(q.y1 - q.y0) * z}px` });
+      if (i >= 0) {
+        el.innerHTML = `<b title="Remove this zone">×</b>`;
+        el.firstChild.onclick = ev => { ev.stopPropagation(); this._zones.splice(i, 1); this._zoneMsg = ""; this._zoneUI(); };
+      }
+      box.appendChild(el);
+    });
+  }
+  // each box -> [x1, y1, x2, y2, passes] in mm. Picture y runs down, the robot's y runs up, so the corners swap.
+  _zonesMm() {
+    const a = this._anchor;
+    return this._zones.map(q => {
+      const [ax, ay] = this._toOrig(q.x0, q.y0), [bx, by] = this._toOrig(q.x1, q.y1);
+      const X = [a.x + ax * a.mm, a.x + bx * a.mm], Y = [a.y - ay * a.mm, a.y - by * a.mm];
+      return [Math.round(Math.min(...X)), Math.round(Math.min(...Y)), Math.round(Math.max(...X)), Math.round(Math.max(...Y)), 1];
+    });
+  }
+  async _zoneClean() {
+    const e = this.shadowRoot.getElementById("err");
+    if (!this._anchor || this._anchor.w !== this._imgW || this._anchor.h !== this._imgH) { e.textContent = "The map changed. Press Zone again to redraw."; return; }
+    const zs = this._zonesMm(); if (!zs.length) return;
+    if (!(await this._prep())) return;
+    if (await this._call("vacuum", "send_command", { command: "app_zoned_clean", params: zs }, { entity_id: this._v })) this._zoneMode(false);
   }
 
   // a segmented control for one of the robot's selects (or the fan list), with app-only options left out
@@ -450,6 +617,7 @@ class RobotVacCard extends HTMLElement {
       try {
         const w = im.naturalWidth, h = im.naturalHeight, c = document.createElement("canvas"); c.width = w; c.height = h;
         const g = c.getContext("2d"); g.drawImage(im, 0, 0); const d = g.getImageData(0, 0, w, h).data;
+        this._imgW = w; this._imgH = h; this._robotPx = findRobot(d, w, h);
         const bg = [d[0], d[1], d[2], d[3]], diff = i => Math.abs(d[i + 3] - bg[3]) > 24 || (d[i + 3] > 24 && Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 36);
         let x0 = w, y0 = h, x1 = -1, y1 = -1;
         for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) if (diff((y * w + x) * 4)) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
@@ -457,8 +625,9 @@ class RobotVacCard extends HTMLElement {
         const pad = Math.round(Math.max(w, h) * 0.02); x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad); x1 = Math.min(w - 1, x1 + pad); y1 = Math.min(h - 1, y1 + pad);
         const o = document.createElement("canvas"); o.width = x1 - x0 + 1; o.height = y1 - y0 + 1;
         o.getContext("2d").drawImage(im, x0, y0, o.width, o.height, 0, 0, o.width, o.height);
-        img.src = o.toDataURL("image/png");
-      } catch (x) { img.src = src; }   // can't read the pixels: show it as it is
+        this._crop = { x0, y0, w: o.width, h: o.height, rot: 0 }; this._mapCv = o;
+        img.src = o.toDataURL("image/png"); this._zoneBtn(); this._zoneDraw();
+      } catch (x) { this._mapCv = null; img.src = src; this._zoneBtn(); }   // can't read the pixels: show it as it is
     };
     im.onerror = () => { img.src = src; };
     im.src = src;
@@ -521,18 +690,19 @@ class RobotVacCard extends HTMLElement {
 
     const N = this._mapN(), imgs = Object.values(h.entities).filter(x => x.device_id === h.entities[this._v]?.device_id && x.entity_id.startsWith("image."));
     const pick = (N !== null && imgs.find(x => x.entity_id.endsWith(`_map_${N}`))) || imgs[0];
-    const map = this._st(pick?.entity_id);
+    const map = this._st(pick?.entity_id); this._mapEnt = pick?.entity_id;
     const mapBox = r.getElementById("map");
     if (map?.attributes.entity_picture) {
       const src = `${map.attributes.entity_picture}&t=${encodeURIComponent(map.state)}`;
       let img = mapBox.querySelector("img");
-      if (!img) { mapBox.innerHTML = `<span class="tag" id="tag"></span>`; img = document.createElement("img"); img.alt = "Map"; mapBox.prepend(img); }
+      if (!img) { mapBox.innerHTML = `<span class="tag" id="tag"></span><div class="hint" id="maphint" hidden></div>`; img = document.createElement("img"); img.alt = "Map"; mapBox.prepend(img); }
       if (this._mapSrc !== src) { this._mapSrc = src; this._trimMap(src, img); }
       const tag = r.getElementById("tag"), live = v.state === "cleaning";
       tag.className = `tag${live ? " live" : ""}`;
       tag.innerHTML = live ? `Live${room ? " · " + esc(room) : ""}` : `<ha-icon icon="mdi:map-outline"></ha-icon>${esc(this._config.where ? this._config.where[0].toUpperCase() + this._config.where.slice(1) : (map.attributes.friendly_name || "Map").replace(/^.*?(Map \d+)$/, "$1"))}`;
     }
 
+    this._zoneBtn();
     const batId = this._find("sensor", /battery/);
     const bat = Number(this._st(batId)?.state ?? a.battery_level), C = 2 * Math.PI * 24;
     r.getElementById("bat").textContent = isNaN(bat) ? "–" : `${bat}%`;
