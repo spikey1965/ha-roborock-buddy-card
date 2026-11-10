@@ -7,7 +7,7 @@
 // and a schedule of cleaning programmes saved as normal Home Assistant automations.
 //
 // type: custom:roborock-buddy-card   (every option is optional - see the README)
-const ROBOROCK_BUDDY_VERSION = "0.2.0";
+const ROBOROCK_BUDDY_VERSION = "0.3.0";
 
 // Roborock's own replacement intervals, in hours
 const LIFE = { main_brush: ["Main brush", 300, "mdi:brush"], side_brush: ["Side brush", 200, "mdi:fan"], filter: ["Filter", 150, "mdi:air-filter"],
@@ -244,6 +244,7 @@ button ha-icon { --mdc-icon-size:20px; }
   background:transparent; border-color:transparent; color:var(--muted); border-radius:10px; }
 .seg button span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
 .seg button.on { background:var(--fg); color:#0b1a2e; box-shadow:0 2px 8px #0003; }
+.seg.dim { opacity:.4; pointer-events:none; } .lbl small { text-transform:none; letter-spacing:0; font-weight:600; }
 .chips { display:flex; flex-wrap:wrap; gap:7px; }
 .chip { display:flex; align-items:center; gap:7px; padding:6px 11px 6px 8px; border-radius:999px; background:#ffffff12; font-size:13px; }
 .chip ha-icon { --mdc-icon-size:18px; color:var(--ok); } .chip span { color:var(--muted); } .chip b { font-weight:700; }
@@ -380,7 +381,8 @@ class RobotVacCard extends HTMLElement {
           </div>
           <div id="mopbox" hidden><div class="lbl">Clean with</div><div class="seg" id="mopc"></div></div>
           <div class="lbl">Suction</div><div class="seg" id="fan"></div>
-          <div id="mopbox2" hidden><div class="lbl">Mop water</div><div class="seg" id="mopi"></div><div class="lbl">Mop route</div><div class="seg" id="mopm"></div></div>
+          <div id="mopbox2" hidden><div class="lbl">Mop water</div><div class="seg" id="mopi"></div></div>
+          <div id="routebox" hidden><div class="lbl">Cleaning pattern<small id="routeN"></small></div><div class="seg" id="mopm"></div></div>
           <div id="schedwrap" hidden><div class="lbl">Schedule</div><div id="schedbox"></div></div>
           <div class="bin" id="bin" hidden><ha-icon icon="mdi:delete-outline"></ha-icon><span id="binT"></span><button id="emptied">Emptied</button></div>
           <div class="err" id="err"></div>
@@ -733,9 +735,12 @@ class RobotVacCard extends HTMLElement {
     const mopping = !mc || this._st(cmId).state !== "vacuum";   // water + route only matter when it mops
     const mi = segSel("mopi", this._find("select", /mop_intensity/)), mm = segSel("mopm", this._find("select", /mop_mode/));
     r.getElementById("mopbox").hidden = !mc;
-    r.getElementById("mopbox2").hidden = !(mopping && (mi || mm));
+    r.getElementById("mopbox2").hidden = !(mopping && mi);
+    // cleaning pattern (the app's route): always shown, greyed out while it only vacuums
+    r.getElementById("routebox").hidden = !mm;
+    r.getElementById("mopm").classList.toggle("dim", !mopping);
+    r.getElementById("routeN").textContent = mopping ? "" : "for mopping";
     r.getElementById("mopi").previousElementSibling.hidden = r.getElementById("mopi").hidden = !mi;
-    r.getElementById("mopm").previousElementSibling.hidden = r.getElementById("mopm").hidden = !mm;
 
     // dock (self-empty / mop-wash docks): whatever of these the integration exposes for this robot
     const dockRows = [
@@ -900,7 +905,7 @@ const SchedMixin = {
     box.querySelectorAll("[data-tog]").forEach(b => b.onclick = () => this._call("automation", this._hass.states[b.dataset.tog].state === "on" ? "turn_off" : "turn_on", {}, { entity_id: b.dataset.tog }));
   },
   _roomName(id) { return (this._rooms || []).find(([r]) => Number(r) === Number(id))?.[1] || `Room ${id}`; },
-  _stepText(s) { return `${MODES.find(m => m[0] === s.mode)?.[1] || s.mode} ${s.rooms.length === (this._rooms || []).length ? "everywhere" : s.rooms.map(r => this._roomName(r)).join(", ")}${s.passes > 1 ? " ×" + s.passes : ""}`; },
+  _stepText(s) { return `${MODES.find(m => m[0] === s.mode)?.[1] || s.mode} ${s.rooms.length === (this._rooms || []).length ? "everywhere" : s.rooms.map(r => this._roomName(r)).join(", ")}${s.mode !== "vacuum" && s.route && s.route !== "standard" ? " · " + nice(s.route) : ""}${s.passes > 1 ? " ×" + s.passes : ""}`; },
   _modalOpen() {
     this._modal = this._modal || document.createElement("div");
     this._modal.className = "modal"; if (!this._modal.isConnected) this.shadowRoot.appendChild(this._modal);
@@ -932,6 +937,8 @@ const SchedMixin = {
     this._edit = p; this._modalOpen();
     const fans = (this._hass.states[this._v].attributes.fan_speed_list || []).filter(f => !HIDE.has(f));
     const waters = (this._st(this._find("select", /mop_intensity/))?.attributes.options || []).filter(o => !HIDE.has(o));
+    const routes = (this._st(this._find("select", /mop_mode/))?.attributes.options || []).filter(o => !HIDE.has(o));
+    p.steps.forEach(s => { if (s.mode !== "vacuum" && routes.length && !routes.includes(s.route)) s.route = routes.includes("standard") ? "standard" : routes[0]; });
     const canMop = !!this._find("select", /cleaning_mode/);
     const chips = (key, i, opts, cur, icons) => `<div class="chipset">${opts.map(([v, t, ic]) => `<button data-k="${key}" data-i="${i}" data-v="${esc(v)}" class="${String(v) === String(cur) ? "on" : ""}">${ic ? `<ha-icon icon="${ic}"></ha-icon>` : ""}${esc(t)}</button>`).join("")}</div>`;
     const steps = p.steps.map((s, i) => `<div class="step"><div class="sh"><span>Step ${i + 1}</span>
@@ -940,6 +947,7 @@ const SchedMixin = {
       ${canMop ? `<div><small>Clean with</small>${chips("mode", i, MODES, s.mode)}</div>` : ""}
       <div class="row2">${s.mode !== "mop" ? `<div class="wide"><small>Suction</small>${chips("fan", i, fans.map(f => [f, nice(f), ICON[f]]), s.fan)}</div>` : ""}
         ${s.mode !== "vacuum" && waters.length ? `<div><small>Mop water</small>${chips("water", i, waters.map(w => [w, nice(w), ICON[w]]), s.water)}</div>` : ""}
+        ${s.mode !== "vacuum" && routes.length ? `<div><small>Cleaning pattern</small>${chips("route", i, routes.map(o => [o, nice(o), ICON[o]]), s.route)}</div>` : ""}
         <div><small>Passes</small>${chips("passes", i, [[1, "Once"], [2, "Twice"]], s.passes)}</div></div>
       ${s.mode !== "vacuum" ? `<div class="note"><ha-icon icon="mdi:power-plug-outline"></ha-icon><span>Mopping needs the dock switched on, so it can wash the pads afterwards.${this._config.dock_hours ? ` Yours has power ${esc(this._config.dock_hours)}.` : ""}</span></div>` : ""}
     </div>`).join("");
@@ -986,7 +994,7 @@ const SchedMixin = {
   // the automation that runs a programme
   _schedAutomation(p) {
     const V = this._v, ent = re => this._find("select", re), status = this._find("sensor", /(^|\.|_)status$/), map = this._config.map;
-    const cm = ent(/cleaning_mode/), mi = ent(/mop_intensity/), sel = ent(/selected_map/), dry = this._find("switch", /mop_drying/);
+    const cm = ent(/cleaning_mode/), mi = ent(/mop_intensity/), mm = ent(/mop_mode/), sel = ent(/selected_map/), dry = this._find("switch", /mop_drying/);
     const q7 = this._isQ7();   // Q7: its status names differ, so wait on the vacuum itself being docked for 90 s
     const settled = q7 || !status ? `{{ is_state('${V}','docked') and (now() - states.${V}.last_changed).total_seconds() > 90 }}`
       : `{{ is_state('${V}','docked') and states('${status}') in ['charging','charging_complete','idle'] and (now() - states.${status}.last_changed).total_seconds() > 90 }}`;
@@ -1001,6 +1009,7 @@ const SchedMixin = {
       if (cm) seq.push({ action: "select.select_option", target: { entity_id: cm }, data: { option: s.mode } });
       if (s.mode !== "mop") seq.push({ action: "vacuum.set_fan_speed", target: { entity_id: V }, data: { fan_speed: s.fan } });
       if (s.mode !== "vacuum" && mi) seq.push({ action: "select.select_option", target: { entity_id: mi }, data: { option: s.water } });
+      if (s.mode !== "vacuum" && mm && s.route) seq.push({ action: "select.select_option", target: { entity_id: mm }, data: { option: s.route } });
       for (let n = 0; n < (q7 ? s.passes : 1); n++) {   // Q7 has no repeat: run the step again for "Twice"
         if (n) seq.push({ delay: "00:00:30" });
         seq.push({ delay: "00:00:30" },

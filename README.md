@@ -19,7 +19,8 @@ A friendly dashboard card for Roborock robot vacuums in Home Assistant: a cartoo
 - **The live map**, with its empty border trimmed off so the rooms are as big as possible.
 - **Tap rooms to clean** them, or one big **Clean all / Pause / Resume** button, plus Dock and Find.
 - **Clean just a zone** (new in 0.2.0): press **Zone**, drag a box over the bit you want cleaned (up to five boxes), and press Clean. No setup.
-- **Clean with, suction, mop water and mop route** as icon buttons. The options that only make sense in the Roborock app (Custom, Smart mode) are left out.
+- **Clean with, suction, mop water and cleaning pattern** as icon buttons. The options that only make sense in the Roborock app (Custom, Smart mode) are left out.
+- **Cleaning pattern** (new in 0.3.0): Standard, Deep, Deep+ or Fast, the same setting as the route in the Roborock app. It's always on the card and greys out while the robot only hoovers, because the pattern is for mopping.
 - **Dock and care at a glance**: dock errors, mop drying, clean water, water box and mop pads, and rings for the main brush, side brush, filter, sensors and dock strainer.
 - **A schedule on the card**: programmes like "07:00 weekdays: hoover the living room" or "12:00 every day: hoover the kitchen, then mop it". Each programme is a list of steps run one after another.
 - Phones, tablets and wall panels.
@@ -30,7 +31,7 @@ A friendly dashboard card for Roborock robot vacuums in Home Assistant: a cartoo
 
 Each programme you make is saved as a **normal Home Assistant automation** (named "Robot: …"). It runs at its time even when no dashboard is open, it survives restarts, and you can see it in **Settings → Automations**.
 
-- Pick the time, the days, and one or more steps. For each step: the rooms, hoover / hoover + mop / mop, suction, mop water and once or twice.
+- Pick the time, the days, and one or more steps. For each step: the rooms, hoover / hoover + mop / mop, suction, mop water, cleaning pattern and once or twice.
 - Steps run one after another: it loads the right map, sets the mode, sends the rooms, waits for the robot to finish and settle on its dock, then starts the next step.
 - If the robot isn't on its dock at the time (say it's been carried to another floor), the programme is skipped and you get a notification.
 - Start from a suggestion (Morning, Lunchtime, Weekend) or press **New**. Each programme has an on/off switch, **Run now** and **Delete**.
