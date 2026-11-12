@@ -18,7 +18,8 @@ A friendly dashboard card for Roborock robot vacuums in Home Assistant: a cartoo
 - **A status line that says what it's doing**: "Cleaning · Kitchen", "Charging", "Drying the mops", with a progress bar, and a red banner when it's stuck ("Main brush jammed").
 - **The live map**, with its empty border trimmed off so the rooms are as big as possible.
 - **Tap rooms to clean** them, or one big **Clean all / Pause / Resume** button, plus Dock and Find.
-- **Clean just a zone** (new in 0.2.0): press **Zone**, drag a box over the bit you want cleaned (up to five boxes), and press Clean. No setup.
+- **Clean just a zone** (new in 0.2.0): press **Zone**, tap the map for a 1 m box or drag one over the bit you want cleaned (up to five boxes), and press Clean. No setup.
+- **Walls and no-go zones** (new in 0.4.0): press **Wall** or **No-go**, tap the map for a 1 m wall or box (or drag to draw one), drag it to move it, drag the white dots to resize or turn it, then **Save to robot**. Up to 10 of each. Saving replaces all walls and no-go zones on the robot, including any drawn in the Roborock app (Home Assistant can't read those).
 - **Clean with, suction, mop water and cleaning pattern** as icon buttons. The options that only make sense in the Roborock app (Custom, Smart mode) are left out.
 - **Cleaning pattern** (new in 0.3.0): Standard, Deep, Deep+ or Fast, the same setting as the route in the Roborock app. It's always on the card and greys out while the robot only hoovers, because the pattern is for mopping.
 - **Dock and care at a glance**: dock errors, mop drying, clean water, water box and mop pads, and rings for the main brush, side brush, filter, sensors and dock strainer.
@@ -106,6 +107,7 @@ Every option is optional.
 | `map` | Pin the card to one of the robot's maps (rooms and picture), and load that map before cleaning. For robots with a map per floor. | `Map 1` |
 | `map_height` | The smallest height of the map, in pixels (default 300). | `260` |
 | `zones` | `false` hides the Zone button. | `false` |
+| `no_go` | `false` hides the Wall and No-go tools (the plain Zone button comes back). | `false` |
 | `carry` | `true` for a robot you carry to this floor: it won't start while it's on its dock, and the picture shows no dock. | `true` |
 | `mode` | Set the cleaning mode before every clean from this card. | `vacuum` |
 | `skip` | Room IDs to leave out of the room list and "Clean all". | `[19]` |
@@ -122,7 +124,8 @@ Every option is optional.
 - **Renaming** from the card changes the robot's name in Home Assistant (the device name). The Roborock app keeps its own name, and entity IDs don't change.
 - **Room names** come from the Roborock app. Name your rooms there; if new names don't show, reload the Roborock integration.
 - **Mopping on a schedule** needs the dock to have power so it can wash the pads afterwards.
-- **Zones** line up by themselves: the card finds the robot on Home Assistant's map and asks it where it is. Press Zone while the robot is standing still (on its dock is fine). The Q7 family can't clean zones from Home Assistant, so there's no Zone button for it.
+- **Zones** line up by themselves: the card finds the robot on Home Assistant's map and asks it where it is. Press Zone while the robot is standing still (on its dock is fine). The Q7 family can't clean zones from Home Assistant, so there's no Zone, Wall or No-go for it.
+- **Walls and no-go zones** use the same line-up as zones. The card remembers what it saved for each Home Assistant user; another user starts with an empty list, and saving from there replaces what's on the robot.
 
 ## Support and requests
 
