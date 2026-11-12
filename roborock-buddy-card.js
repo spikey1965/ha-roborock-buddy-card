@@ -7,7 +7,7 @@
 // and a schedule of cleaning programmes saved as normal Home Assistant automations.
 //
 // type: custom:roborock-buddy-card   (every option is optional - see the README)
-const ROBOROCK_BUDDY_VERSION = "0.3.0";
+const ROBOROCK_BUDDY_VERSION = "0.4.0";
 
 // Roborock's own replacement intervals, in hours
 const LIFE = { main_brush: ["Main brush", 300, "mdi:brush"], side_brush: ["Side brush", 200, "mdi:fan"], filter: ["Filter", 150, "mdi:air-filter"],
@@ -223,6 +223,22 @@ button ha-icon { --mdc-icon-size:20px; }
 .gorow { display:flex; gap:8px; margin-top:12px; } .gorow .go { margin-top:0; flex:1; min-width:0; }
 .zbtn { flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:0 14px; font-size:13px; font-weight:800; }
 .zbtn.on { background:#ffd84d; color:#0b1a2e; border-color:transparent; }
+/* walls + no-go zones: tool bar above the rooms, panel in place of the rooms while drawing */
+.mtools { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; padding:4px; border-radius:14px; background:#0000002e; border:1px solid #ffffff12; margin-top:16px; }
+.mtools button { background:transparent; border-color:transparent; padding:8px 4px; display:flex; flex-direction:column; align-items:center; gap:2px; font-size:12px; font-weight:700; color:var(--muted); }
+.mtools button ha-icon { --mdc-icon-size:20px; } .mtools button.on { background:var(--fg); color:#0b1a2e; box-shadow:0 2px 8px #0003; }
+.rulesp { display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+.rulesp .help { font-size:13px; color:var(--muted); line-height:1.45; }
+.rcount { display:flex; gap:8px; } .rcount span { flex:1; padding:8px 10px; border-radius:12px; background:#0000002e; border:1px solid #ffffff12; font-size:12px; color:var(--muted); }
+.rcount b { display:block; color:var(--fg); font-size:16px; }
+.rwarn { font-size:12.5px; line-height:1.4; color:#ffd2d2; background:#ff5a5a1f; border:1px solid #ff5a5a55; border-radius:12px; padding:8px 10px; }
+.rsave { padding:12px; font-size:15px; font-weight:800; background:#ff5a5a; color:#fff; border:0; display:flex; align-items:center; justify-content:center; gap:8px; }
+.rsave:disabled { background:#ffffff14; color:var(--muted); box-shadow:none; opacity:1; }
+.rstate { font-size:12.5px; color:var(--muted); min-height:1em; } .rstate.ok { color:#9ff0b9; } .rstate.bad { color:var(--bad); }
+.map.ruling { cursor:crosshair; touch-action:none; outline:2px solid #ff5a5a; outline-offset:-2px; }
+.map svg.rules { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:1; }
+.map svg.rules .hit { pointer-events:stroke; cursor:move; } .map svg.rules .mv { pointer-events:all; cursor:move; } .map svg.rules .xb { pointer-events:all; cursor:pointer; }
+.map svg.rules .hd { pointer-events:all; cursor:grab; }
 .map.zoning { cursor:crosshair; touch-action:none; outline:2px solid #ffd84d; outline-offset:-2px; }
 .map .zone { position:absolute; border:2px solid #ffd84d; background:#ffd84d38; border-radius:4px; pointer-events:none; box-sizing:border-box; }
 .map .zone b { position:absolute; top:-2px; right:-2px; width:24px; height:24px; border-radius:0 2px 0 8px; background:#ffd84d; color:#0b1a2e; display:grid; place-items:center;
@@ -278,7 +294,8 @@ const findVac = (h, find) => {
 };
 
 // zone cleaning helpers
-const ZONE_KEY = "robot_vac_zone_anchor", ZONE_MAX = 5;   // Roborock takes up to 5 zones in one go
+const ZONE_KEY = "robot_vac_zone_anchor", ZONE_MAX = 5, MAP_MM = 12.5;   // Roborock takes up to 5 zones in one go; MAP_MM = millimetres per pixel of Home Assistant's Roborock map
+const RULES_KEY = "robot_vac_rules", RULES_MAX = 10;   // walls + no-go zones saved to the robot from this card, per vacuum + map
 // Home Assistant draws the robot on its map as a white disc. Finding it, plus the robot's own position (roborock.get_vacuum_current_position),
 // lines the picture up with the robot's millimetre coordinates, so a box drawn on the map can be sent as a zone. Returns the disc's
 // centre in picture pixels and the millimetres per pixel (map units are 50 mm, the picture is drawn at a whole-number scale).
@@ -300,8 +317,13 @@ const findRobot = (d, w, h) => {
     if (bw >= 9 && bw <= 120 && Math.abs(bw - bh) <= 3 && n > bw * bh * 0.45 && (!best || n > best.n)) best = { n, x: (x0 + x1) / 2, y: (y0 + y1) / 2, bw };
   }
   if (!best) return null;
-  const scale = Math.max(1, Math.round(best.bw / 10.5));   // the disc's white middle is about 10.5 px across per unit of scale
-  return { x: best.x, y: best.y, mm: 50 / scale };
+  // Home Assistant's Roborock map is drawn at 12.5 mm per pixel. Newer versions draw crosshair lines through the robot, which split its
+  // white middle into pieces, so the centre comes from all white pixels near the biggest piece (the whole disc).
+  let X0 = w, X1 = 0, Y0 = h, Y1 = 0;
+  for (let y = Math.max(0, Math.floor(best.y - 40)); y <= Math.min(h - 1, best.y + 40); y++)
+    for (let x = Math.max(0, Math.floor(best.x - 40)); x <= Math.min(w - 1, best.x + 40); x++)
+      if (white(y * w + x)) { if (x < X0) X0 = x; if (x > X1) X1 = x; if (y < Y0) Y0 = y; if (y > Y1) Y1 = y; }
+  return { x: (X0 + X1) / 2, y: (Y0 + Y1) / 2, mm: MAP_MM };
 };
 
 class RobotVacCard extends HTMLElement {
@@ -404,7 +426,26 @@ class RobotVacCard extends HTMLElement {
     const mp = r.getElementById("map");
     mp.addEventListener("pointerdown", e => this._zoneDown(e)); mp.addEventListener("pointermove", e => this._zoneMove(e));
     ["pointerup", "pointercancel"].forEach(t => mp.addEventListener(t, e => this._zoneUp(e)));
-    if (window.ResizeObserver) new ResizeObserver(() => this._zoneDraw()).observe(mp);
+    mp.addEventListener("pointerdown", e => this._rulesDown(e)); mp.addEventListener("pointermove", e => this._rulesMove(e));
+    ["pointerup", "pointercancel"].forEach(t => mp.addEventListener(t, e => this._rulesUp(e)));
+    // tool bar Rooms / Zone / Wall / No-go (no_go: false hides Wall + No-go and keeps the plain Zone button). Walls and no-go zones
+    // are saved on the robot (save_map) and use the same map line-up as Zone; the bar only shows where zones work.
+    if (this._config.no_go !== false) {
+      const rooms = r.getElementById("rooms"), tb = document.createElement("div"); tb.className = "mtools"; tb.id = "mtools"; tb.hidden = true;
+      tb.innerHTML = [["rooms", "mdi:floor-plan", "Rooms"], ["zone", "mdi:selection-drag", "Zone"], ["wall", "mdi:wall", "Wall"], ["nogo", "mdi:cancel", "No-go"]]
+        .map(([k, i, n]) => `<button data-t="${k}"${k === "rooms" ? ' class="on"' : ""}><ha-icon icon="${i}"></ha-icon>${n}</button>`).join("");
+      rooms.previousElementSibling.before(tb);
+      const rp = document.createElement("div"); rp.className = "rulesp"; rp.id = "rulesp"; rp.hidden = true;
+      rp.innerHTML = `<div class="help" id="rhelp"></div>
+        <div class="rcount"><span>No-go zones<b id="rnNogo">0 / ${RULES_MAX}</b></span><span>Walls<b id="rnWall">0 / ${RULES_MAX}</b></span></div>
+        <div class="rwarn">Saving replaces <b>all</b> walls and no-go zones on this robot, including any drawn in the Roborock app.</div>
+        <button class="rsave" id="rsave" disabled><ha-icon icon="mdi:content-save"></ha-icon><span>Save to robot</span></button>
+        <div class="rstate" id="rstate"></div>`;
+      r.querySelector(".gorow").after(rp);
+      tb.onclick = e => { const b = e.target.closest("button"); if (b) this._tool(b.dataset.t); };
+      rp.querySelector("#rsave").onclick = () => this._rulesSave();
+    }
+    if (window.ResizeObserver) new ResizeObserver(() => { this._zoneDraw(); this._rulesDraw(); }).observe(mp);
     r.getElementById("zoneBtn").onclick = () => this._zoneMode(!this._zoning);
     r.getElementById("clean").onclick = async () => {
       if (this._zoning) return this._zoneClean();
@@ -482,10 +523,164 @@ class RobotVacCard extends HTMLElement {
 
   // ---- zone cleaning: drag boxes on the map, sent as app_zoned_clean in the robot's own millimetres ----
   // zones: false hides it. Not on the Q7 family (no zone command in Home Assistant), or when the map's pixels can't be read.
+  // ---- walls + no-go zones (tool bar). Kept in mm (robot coordinates) so they survive map picture changes. ----
+  _tool(t) {
+    const r = this.shadowRoot;
+    if (t !== "zone" && this._zoning) this._zoneMode(false);
+    this._rules = t === "wall" || t === "nogo" ? t : null; this._rdraft = null;
+    if (t === "zone" && !this._zoning) this._zoneMode(true);
+    r.querySelectorAll("#mtools button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+    const rp = r.getElementById("rulesp"), rules = !!this._rules;
+    if (rp) rp.hidden = !rules;
+    [r.getElementById("rooms"), r.getElementById("rooms")?.previousElementSibling, r.querySelector(".gorow"), r.querySelector(".maphelp")].forEach(x => { if (x) x.hidden = rules; });
+    r.getElementById("map")?.classList.toggle("ruling", rules);
+    if (rules) {
+      this._sel.clear(); if (this._rooms) this._drawRooms();
+      r.getElementById("maphint")?.setAttribute("hidden", "");
+      r.getElementById("rhelp").textContent = t === "wall" ? "Tap the map for a 1 m wall, or drag to draw one. Drag a line to move it, drag a white dot to stretch or turn it, \u00d7 removes it."
+        : "Tap the map for a 1 m box, or drag to draw one. Drag a box to move it, drag a white corner to resize it, \u00d7 removes it.";
+      this._rulesLoad();
+    }
+    this._rulesDraw();
+  }
+  _rulesKey() { return `${this._v}|${this._config.map || "map"}`; }
+  async _rulesLoad() {
+    const h = this._hass;
+    if (!this._rulesAll) this._rulesAll = await h.callWS({ type: "frontend/get_user_data", key: RULES_KEY }).then(x => x?.value || {}).catch(() => ({}));
+    if (!this._rlist) { const sv = this._rulesAll[this._rulesKey()]; this._rlist = { nogo: [...(sv?.nogo || [])], wall: [...(sv?.wall || [])] }; this._rdirty = false; }
+    if (!this._anchor) await this._zoneAnchor();
+    this._rulesState();
+    this._rulesDraw();
+  }
+  _rulesState(msg, cls) {
+    const r = this.shadowRoot, L = this._rlist || { nogo: [], wall: [] }, sv = (this._rulesAll || {})[this._rulesKey()];
+    if (!r.getElementById("rsave")) return;
+    r.getElementById("rnNogo").textContent = `${L.nogo.length} / ${RULES_MAX}`; r.getElementById("rnWall").textContent = `${L.wall.length} / ${RULES_MAX}`;
+    r.getElementById("rsave").disabled = !this._rdirty || !this._anchor || this._rsaving;
+    const st = r.getElementById("rstate");
+    st.className = "rstate" + (cls ? " " + cls : "");
+    st.textContent = msg || (!this._anchor ? "Can't line the map up with the robot yet. Let it sit still on the dock, then try again."
+      : this._rdirty ? "Not saved yet" : sv?.saved ? `Saved to the robot ${new Date(sv.saved).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "Nothing saved from here yet");
+  }
+  // mm <-> shown picture pixels (the inverse of _toOrig + the anchor)
+  _mmToCv(xm, ym) {
+    const a = this._anchor, c = this._crop; if (!a || !c) return null;
+    const u = (xm - a.x) / a.mm - c.x0, v = (a.y - ym) / a.mm - c.y0;
+    if (c.rot === 90) return [c.h - v, u]; if (c.rot === 180) return [c.w - u, c.h - v]; if (c.rot === 270) return [v, c.w - u];
+    return [u, v];
+  }
+  _cvToMm(X, Y) { const a = this._anchor, [u, v] = this._toOrig(X, Y); return [Math.round(a.x + u * a.mm), Math.round(a.y - v * a.mm)]; }
+  _rulesDown(e) {
+    if (!this._rules || e.button > 0 || !this._anchor || e.target.closest?.("button, .xb, .hit")) return;
+    const L = this._rlist; if (!L || L[this._rules].length >= RULES_MAX) { this._rulesState(`That's ${RULES_MAX}, the most it takes`, "bad"); return; }
+    const p = this._cvPt(e); if (!p) return;
+    this._rdraft = { x0: p[0], y0: p[1], x1: p[0], y1: p[1] };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {}
+    e.preventDefault(); this._rulesDraw();
+  }
+  _rulesMove(e) {
+    const mv = this._rmove;
+    if (mv) {   // dragging a box/wall (move) or one of its handles (resize / stretch)
+      const p = this._cvPt(e); if (!p) return;
+      const [xm, ym] = this._cvToMm(p[0], p[1]), dx = xm - mv.from[0], dy = ym - mv.from[1], o = mv.orig, it = this._rlist[mv.k][mv.i];
+      if (Math.abs(dx) + Math.abs(dy) > 40) mv.moved = true;
+      if (mv.part === "body") { it[0] = o[0] + dx; it[1] = o[1] + dy; it[2] = o[2] + dx; it[3] = o[3] + dy; }
+      else if (mv.k === "wall") { const j = mv.part === "a" ? 0 : 2; it[j] = xm; it[j + 1] = ym; }
+      else {   // box corner: that corner follows the finger, the opposite one stays put
+        const fx = mv.part.includes("l") ? 2 : 0, fy = mv.part.includes("b") ? 3 : 1;   // fixed corner (mm; y up)
+        const X = [o[fx], xm], Y = [o[fy], ym];
+        if (Math.abs(X[1] - X[0]) >= 300 && Math.abs(Y[1] - Y[0]) >= 300) { it[0] = Math.min(...X); it[2] = Math.max(...X); it[1] = Math.min(...Y); it[3] = Math.max(...Y); }
+      }
+      this._rulesDraw(); return;
+    }
+    if (!this._rdraft) return; const p = this._cvPt(e); if (!p) return; this._rdraft.x1 = p[0]; this._rdraft.y1 = p[1]; this._rulesDraw();
+  }
+  _rulesUp() {
+    if (this._rmove) {
+      const mv = this._rmove; this._rmove = null;
+      if (mv.moved) { this._rlist[mv.k][mv.i] = this._rlist[mv.k][mv.i].map(Math.round); this._rdirty = true; }
+      this._rulesState(); this._rulesDraw(); return;
+    }
+    const d = this._rdraft; if (!d) return; this._rdraft = null;
+    let [ax, ay] = this._cvToMm(d.x0, d.y0), [bx, by] = this._cvToMm(d.x1, d.y1);
+    if (Math.hypot(bx - ax, by - ay) < 150) {   // a tap drops a 1 m box / 1 m wall centred on it, ready to move or resize
+      if (this._rules === "wall") { ax -= 500; bx = ax + 1000; by = ay; } else { ax -= 500; ay -= 500; bx = ax + 1000; by = ay + 1000; }
+    }
+    if (this._rules === "wall") {
+      if (Math.hypot(bx - ax, by - ay) >= 300) { this._rlist.wall.push([ax, ay, bx, by]); this._rdirty = true; }
+    } else if (Math.abs(bx - ax) >= 300 && Math.abs(by - ay) >= 300) {
+      this._rlist.nogo.push([Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)]); this._rdirty = true;
+    }
+    this._rulesState(); this._rulesDraw();
+  }
+  _rulesDraw() {
+    const box = this.shadowRoot?.getElementById("map"); if (!box) return;
+    box.querySelector("svg.rules")?.remove();
+    const img = box.querySelector("img"), cv = this._mapCv;
+    if (!this._rules || !img || !cv || !this._rlist || !this._anchor) return;
+    // screen px -> the map box's own px (the Areas page can scale the whole card with a CSS transform)
+    const b = img.getBoundingClientRect(), m = box.getBoundingClientRect(), sk = m.width / (box.offsetWidth || m.width), zs = Math.min(b.width / cv.width, b.height / cv.height);
+    const z = zs / sk, ox = (b.left - m.left + (b.width - cv.width * zs) / 2) / sk, oy = (b.top - m.top + (b.height - cv.height * zs) / 2) / sk;
+    const P = (xm, ym) => { const q = this._mmToCv(xm, ym); return q ? [ox + q[0] * z, oy + q[1] * z] : [0, 0]; };
+    const D = ([x0, y0], [x1, y1]) => ({ x0, y0, x1, y1 });
+    let svg = `<defs><pattern id="hatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="9" height="9" fill="#ff5a5a30"/><line x1="0" y1="0" x2="0" y2="9" stroke="#ff5a5a" stroke-width="3"/></pattern></defs>`;
+    const act = k => this._rules === k ? 1 : .45;
+    const ed = k => this._rules === k, X = (x, y, k, i) => `<g class="xb" data-k="${k}" data-i="${i}"><circle cx="${x}" cy="${y}" r="13" fill="#ff5a5a" stroke="#fff" stroke-width="1.5"/><text x="${x}" y="${y + 6}" text-anchor="middle" font-size="18" font-weight="800" fill="#fff">\u00d7</text></g>`;
+    const H = (x, y, k, i, part, r = 11) => `<circle class="hd" data-k="${k}" data-i="${i}" data-p="${part}" cx="${x}" cy="${y}" r="${r}" fill="#fff" stroke="#ff5a5a" stroke-width="${r > 7 ? 3 : 2}"/>`;
+    this._rlist.nogo.forEach(([x1, y1, x2, y2], i) => {
+      const [ax, ay] = P(x1, y1), [bx, by] = P(x2, y2), L = Math.min(ax, bx), T = Math.min(ay, by), R = Math.max(ax, bx), B = Math.max(ay, by);
+      // which mm corner sits at each screen corner (the map can be turned): pick by comparing screen positions
+      const cn = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]].map(([mx, my]) => { const [sx, sy] = P(mx, my); return { sx, sy, part: (mx === x1 ? "l" : "r") + (my === y1 ? "b" : "t") }; });
+      svg += `<g opacity="${act("nogo")}"><rect${ed("nogo") ? ` class="mv" data-k="nogo" data-i="${i}" data-p="body"` : ""} x="${L}" y="${T}" width="${R - L}" height="${B - T}" rx="3" fill="url(#hatch)" stroke="#ff5a5a" stroke-width="2.5"/>`
+        + (ed("nogo") ? (() => { const sz = Math.min(R - L, B - T), hr = Math.max(5, Math.min(11, sz / 6));   // small boxes get small handles, x lifted above
+            return cn.map(c => H(c.sx, c.sy, "nogo", i, c.part, hr)).join("") + X((L + R) / 2, sz < 80 ? T - 20 : T, "nogo", i); })() : "") + `</g>`;
+    });
+    this._rlist.wall.forEach(([x1, y1, x2, y2], i) => {
+      const [ax, ay] = P(x1, y1), [bx, by] = P(x2, y2);
+      svg += `<g opacity="${act("wall")}"><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="#0b1a2e" stroke-opacity=".55" stroke-width="9" stroke-linecap="round"/>`
+        + `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="#ff5a5a" stroke-width="5" stroke-linecap="round"/>`
+        + (ed("wall") ? `<line class="hit" data-k="wall" data-i="${i}" data-p="body" x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="transparent" stroke-width="26"/>`
+          + H(ax, ay, "wall", i, "a") + H(bx, by, "wall", i, "b") + X((ax + bx) / 2 + 18, (ay + by) / 2 - 18, "wall", i) : "") + `</g>`;
+    });
+    const d = this._rdraft;
+    if (d) {
+      const [ax, ay] = [ox + d.x0 * z, oy + d.y0 * z], [bx, by] = [ox + d.x1 * z, oy + d.y1 * z];
+      svg += this._rules === "wall" ? `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="#ff5a5a" stroke-width="5" stroke-linecap="round" stroke-dasharray="9 6"/>`
+        : `<rect x="${Math.min(ax, bx)}" y="${Math.min(ay, by)}" width="${Math.abs(bx - ax)}" height="${Math.abs(by - ay)}" rx="3" fill="url(#hatch)" stroke="#ff5a5a" stroke-width="2" stroke-dasharray="7 5"/>`;
+    }
+    box.insertAdjacentHTML("beforeend", `<svg class="rules">${svg}</svg>`);
+    box.querySelectorAll("svg.rules .xb").forEach(el => el.addEventListener("pointerdown", ev => {
+      ev.stopPropagation(); ev.preventDefault();
+      this._rlist[el.dataset.k].splice(Number(el.dataset.i), 1); this._rdirty = true; this._rulesState(); this._rulesDraw();
+    }));
+    // drag a box / wall to move it, or a white handle to resize a box / move one end of a wall. The pointer is captured on the map
+    // box because the SVG is redrawn on every move.
+    box.querySelectorAll("svg.rules .mv, svg.rules .hit, svg.rules .hd").forEach(el => el.addEventListener("pointerdown", ev => {
+      if (ev.button > 0) return; ev.stopPropagation(); ev.preventDefault();
+      const p = this._cvPt(ev); if (!p) return;
+      const k = el.dataset.k, i = Number(el.dataset.i);
+      this._rmove = { k, i, part: el.dataset.p, from: this._cvToMm(p[0], p[1]), orig: [...this._rlist[k][i]], moved: false };
+      try { box.setPointerCapture(ev.pointerId); } catch (x) {}
+    }));
+  }
+  // save_map payload (as Valetudo sends it): [1, x1, y1, x2, y2] per wall, [0, four corners] per no-go zone; replaces the robot's whole list
+  async _rulesSave() {
+    const L = this._rlist, a = this._anchor; if (!L || !a) return;
+    if (a.w !== this._imgW || a.h !== this._imgH) { this._rulesState("The map changed. Close and open the map, then try again.", "bad"); return; }
+    const params = [...L.wall.map(w => [1, ...w]), ...L.nogo.map(([x1, y1, x2, y2]) => [0, x1, y1, x2, y1, x2, y2, x1, y2])];
+    this._rsaving = true; this._rulesState("Saving\u2026");
+    const ok = await this._call("vacuum", "send_command", { command: "save_map", params }, { entity_id: this._v });
+    this._rsaving = false;
+    if (!ok) { this._rulesState("The robot didn't take it. " + (this.shadowRoot.getElementById("err").textContent || ""), "bad"); return; }
+    this._rulesAll = { ...this._rulesAll, [this._rulesKey()]: { nogo: L.nogo, wall: L.wall, saved: Date.now() } };
+    await this._hass.callWS({ type: "frontend/set_user_data", key: RULES_KEY, value: this._rulesAll }).catch(() => {});
+    this._rdirty = false; this._rulesState(`Saved: ${L.nogo.length} no-go zone${L.nogo.length === 1 ? "" : "s"}, ${L.wall.length} wall${L.wall.length === 1 ? "" : "s"}. Check the Roborock app map.`, "ok");
+  }
   _zoneBtn() {
     const b = this.shadowRoot?.getElementById("zoneBtn"); if (!b) return;
     const off = this._config.zones === false || this._noZones || this._isQ7() || !this._mapCv;
     b.hidden = off; if (off && this._zoning) this._zoneMode(false);
+    const mt = this.shadowRoot.getElementById("mtools"); if (mt) { b.hidden = true; mt.hidden = off; if (off && this._rules) this._tool("rooms"); }   // the tool bar has its own Zone
   }
   _zoneMode(on) {
     this._zoning = on; this._zones = []; this._draft = null; this._zoneMsg = "";
@@ -494,6 +689,7 @@ class RobotVacCard extends HTMLElement {
     if (!on) this.shadowRoot.getElementById("maphint")?.setAttribute("hidden", "");
     if (this._rooms) this._drawRooms();   // button text back to rooms, room hint if one is due
     if (on) this._zoneAnchor();
+    if (!this._rules) this.shadowRoot.querySelectorAll("#mtools button").forEach(b => b.classList.toggle("on", b.dataset.t === (on ? "zone" : "rooms")));
   }
   // line the map picture up with the robot: its disc on the picture + where it says it is. Only while it's standing still (the picture
   // lags up to 30 s while it moves) and on this card's map; otherwise use the last line-up saved for this map, if the picture is the same size.
@@ -518,7 +714,7 @@ class RobotVacCard extends HTMLElement {
         }
       }
     }
-    if (!this._anchor) { const a = this._anchors[key]; if (a && a.w === this._imgW && a.h === this._imgH) this._anchor = a; }
+    if (!this._anchor) { const a = this._anchors[key]; if (a && a.w === this._imgW && a.h === this._imgH && a.mm === MAP_MM) this._anchor = a; }
     if (!this._zoning) return;
     if (!this._anchor) this._zoneMsg = !still ? "Wait till it stops, then press Zone again" : !onMap ? `Load ${this._config.map} first` : "Can't find the robot on the map";
     this._zoneUI();
@@ -532,7 +728,7 @@ class RobotVacCard extends HTMLElement {
     r.getElementById("cleanT").textContent = n ? `Clean ${n} zone${n > 1 ? "s" : ""}` : "Draw a box on the map";
     go.querySelector("ha-icon").setAttribute("icon", n ? "mdi:play-circle" : "mdi:selection-drag");
     if (hint) {
-      const msg = this._zoneMsg || (n >= ZONE_MAX ? `That's ${ZONE_MAX}, the most it takes` : n ? "Drag another, or press Clean" : "Drag a box over the bit to clean");
+      const msg = this._zoneMsg || (n >= ZONE_MAX ? `That's ${ZONE_MAX}, the most it takes` : n ? "Drag another, or press Clean" : "Tap for a 1 m box, or drag one over the bit to clean");
       hint.className = "hint"; hint.hidden = false;
       hint.innerHTML = `<span>${esc(msg)}</span><button id="zoneno">Cancel</button>`;
       hint.querySelector("#zoneno").onclick = e => { e.stopPropagation(); this._zoneMode(false); };
@@ -563,6 +759,11 @@ class RobotVacCard extends HTMLElement {
   _zoneUp() {
     const d = this._draft; if (!d) return; this._draft = null;
     const min = 300 / (this._anchor?.mm || this._robotPx?.mm || 12.5);   // at least 30 cm a side
+    if (Math.abs(d.x1 - d.x0) + Math.abs(d.y1 - d.y0) < min / 2) {   // a tap drops a 1 m box centred on it
+      const half = 500 / (this._anchor?.mm || this._robotPx?.mm || 12.5), cv = this._mapCv;
+      const cx = Math.max(half, Math.min((cv?.width || 1e9) - half, d.x0)), cy = Math.max(half, Math.min((cv?.height || 1e9) - half, d.y0));
+      d.x0 = cx - half; d.x1 = cx + half; d.y0 = cy - half; d.y1 = cy + half;
+    }
     if (Math.abs(d.x1 - d.x0) >= min && Math.abs(d.y1 - d.y0) >= min) {
       this._zones.push({ x0: Math.min(d.x0, d.x1), y0: Math.min(d.y0, d.y1), x1: Math.max(d.x0, d.x1), y1: Math.max(d.y0, d.y1) }); this._zoneMsg = this._anchor ? "" : this._zoneMsg;
     } else if (Math.abs(d.x1 - d.x0) + Math.abs(d.y1 - d.y0) > 4) this._zoneMsg = "Too small. Drag a bigger box";
@@ -573,8 +774,9 @@ class RobotVacCard extends HTMLElement {
     box.querySelectorAll(".zone").forEach(z => z.remove());
     const img = box.querySelector("img"), cv = this._mapCv;
     if (!this._zoning || !img || !cv) return;
-    const b = img.getBoundingClientRect(), m = box.getBoundingClientRect(), z = Math.min(b.width / cv.width, b.height / cv.height);
-    const ox = b.left - m.left + (b.width - cv.width * z) / 2, oy = b.top - m.top + (b.height - cv.height * z) / 2;
+    // screen px -> the map box's own px (a dashboard can scale the card with a CSS transform)
+    const b = img.getBoundingClientRect(), m = box.getBoundingClientRect(), sk = m.width / (box.offsetWidth || m.width), zs = Math.min(b.width / cv.width, b.height / cv.height);
+    const z = zs / sk, ox = (b.left - m.left + (b.width - cv.width * zs) / 2) / sk, oy = (b.top - m.top + (b.height - cv.height * zs) / 2) / sk;
     [...this._zones.map((q, i) => [q, i]), ...(this._draft ? [[this._draft, -1]] : [])].forEach(([q, i]) => {
       const el = document.createElement("div"); el.className = `zone${i < 0 ? " draft" : ""}`;
       Object.assign(el.style, { left: `${ox + Math.min(q.x0, q.x1) * z}px`, top: `${oy + Math.min(q.y0, q.y1) * z}px`,
