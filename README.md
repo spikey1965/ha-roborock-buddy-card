@@ -24,6 +24,7 @@ A friendly dashboard card for Roborock robot vacuums in Home Assistant: a cartoo
 - **Cleaning pattern** (new in 0.3.0): Standard, Deep, Deep+ or Fast, the same setting as the route in the Roborock app. It's always on the card and greys out while the robot only hoovers, because the pattern is for mopping.
 - **Dock and care at a glance**: dock errors, mop drying, clean water, water box and mop pads, and rings for the main brush, side brush, filter, sensors and dock strainer.
 - **A schedule on the card**: programmes like "07:00 weekdays: hoover the living room" or "12:00 every day: hoover the kitchen, then mop it". Each programme is a list of steps run one after another.
+- **In English, Spanish or German** (new in 0.5.0): the card follows your Home Assistant language. Room names and your robot's name stay as they are.
 - Phones, tablets and wall panels.
 
 ![The four robot types: mop-wash dock, self-empty dock, charger only and no dock](images/robot-types.png)
@@ -118,6 +119,7 @@ Every option is optional.
 | `dock_hours` | Shown in the reminder on mop steps if your dock only has power at certain times. | `00:30-07:30` |
 | `bin_helper`, `bin_every` | For robots without a self-empty dock: an `input_number` helper that remembers when you last emptied the bin, and how many runs between emptying (default 2). An **Emptied** button appears on the card. | `input_number.bin_emptied`, `3` |
 | `where` | Shown in the "no map yet" message. | `upstairs` |
+| `language` | The card's language: `en`, `es` or `de`. Normally it follows your Home Assistant language. | `es` |
 
 ## Good to know
 
@@ -126,6 +128,12 @@ Every option is optional.
 - **Mopping on a schedule** needs the dock to have power so it can wash the pads afterwards.
 - **Zones** line up by themselves: the card finds the robot on Home Assistant's map and asks it where it is. Press Zone while the robot is standing still (on its dock is fine). The Q7 family can't clean zones from Home Assistant, so there's no Zone, Wall or No-go for it.
 - **Walls and no-go zones** use the same line-up as zones. The card remembers what it saved for each Home Assistant user; another user starts with an empty list, and saving from there replaces what's on the robot.
+
+## Languages
+
+The card speaks English, Spanish (*español*) and German (*Deutsch*), and follows the language set in your Home Assistant profile. To pick one for a single card, add `language: es` (or `de`, `en`). Anything without a translation stays in English.
+
+Would you like it in your language, or did a word come out wrong? Open an issue with the corrections, or a pull request: the words are in the `I18N` list near the top of `roborock-buddy-card.js`. Thanks to @pater79 for asking for Spanish.
 
 ## Support and requests
 

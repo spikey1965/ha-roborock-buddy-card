@@ -7,7 +7,8 @@
 // and a schedule of cleaning programmes saved as normal Home Assistant automations.
 //
 // type: custom:roborock-buddy-card   (every option is optional - see the README)
-const ROBOROCK_BUDDY_VERSION = "0.4.0";
+// Languages: English, Spanish and German. It follows Home Assistant's language, or set  language: es | de | en
+const ROBOROCK_BUDDY_VERSION = "0.5.0";
 
 // Roborock's own replacement intervals, in hours
 const LIFE = { main_brush: ["Main brush", 300, "mdi:brush"], side_brush: ["Side brush", 200, "mdi:fan"], filter: ["Filter", 150, "mdi:air-filter"],
@@ -326,9 +327,239 @@ const findRobot = (d, w, h) => {
   return { x: (X0 + X1) / 2, y: (Y0 + Y1) / 2, mm: MAP_MM };
 };
 
+// ---------- Languages (0.5.0) ----------
+// The card is written in English. After it draws, every bit of its own text is swapped for the chosen language:
+// Home Assistant's language, or `language: es` / `de` / `en` in the card's settings. Room names, robot names and
+// anything else that comes from your Home Assistant are left as they are. A phrase without a translation stays
+// in English, so nothing can go blank. To add a language, copy the `es` block and translate the right-hand side.
+const I18N = {
+  es: {
+    // status
+    "Cleaning": "Limpiando", "Going home": "Volviendo a la base", "Paused": "En pausa", "Docked": "En la base", "Idle": "En espera",
+    "Needs help": "Necesita ayuda", "Charging": "Cargando", "Fully charged": "Carga completa", "Emptying the bin": "Vaciando el depósito",
+    "Washing the mops": "Lavando las mopas", "Going to wash the mops": "Va a lavar las mopas", "Drying the mops": "Secando las mopas",
+    "Docking": "Acoplándose", "Mapping": "Creando mapa", "Spot cleaning": "Limpieza puntual", "Mopping": "Fregando", "Updating": "Actualizando",
+    "It's stuck": "Se ha atascado", "It's stuck.": "Se ha atascado.", "Sort it out, then press Clean all or Dock.": "Soluciónalo y pulsa Limpiar todo o Base.",
+    // main controls
+    "Clean all": "Limpiar todo", "Pause": "Pausa", "Resume": "Reanudar", "Dock": "Base", "Rooms": "Habitaciones", "Zone": "Zona",
+    "Pick rooms to clean": "Elige habitaciones", "Draw a box on the map": "Dibuja un recuadro en el mapa", "Map": "Mapa",
+    "Draw boxes on the map and clean just those": "Dibuja recuadros en el mapa y limpia solo eso",
+    "Suction": "Succión", "Clean with": "Limpiar con", "Mop water": "Agua de la mopa", "Cleaning pattern": "Patrón de limpieza",
+    "for mopping": "para fregar", "Area": "Área", "Battery": "Batería", "Care": "Mantenimiento", "Schedule": "Programación",
+    "Vacuum": "Aspirar", "Vac + mop": "Aspirar + fregar", "Mop": "Fregar", "Hoover": "Aspirar", "Hoover + mop": "Aspirar + fregar",
+    "Quiet": "Silencioso", "Balanced": "Equilibrado", "Turbo": "Turbo", "Max": "Máx.", "Max+": "Máx.+", "Off": "Apagado",
+    "Low": "Bajo", "Medium": "Medio", "High": "Alto", "Mild": "Suave", "Moderate": "Moderado", "Intense": "Intenso",
+    "Standard": "Estándar", "Deep": "Profundo", "Deep+": "Profundo+", "Fast": "Rápido", "Gentle": "Suave", "Strong": "Fuerte",
+    // zones, walls, no-go zones
+    "Tap for a 1 m box, or drag one over the bit to clean": "Toca para un recuadro de 1 m, o arrastra sobre la zona a limpiar",
+    "Drag another, or press Clean": "Dibuja otro, o pulsa Limpiar", "Too small. Drag a bigger box": "Demasiado pequeño. Dibuja un recuadro mayor",
+    "Wait till it stops, then press Zone again": "Espera a que pare y pulsa Zona otra vez", "Remove this zone": "Quitar esta zona",
+    "The map changed. Press Zone again to redraw.": "El mapa ha cambiado. Pulsa Zona otra vez para redibujar.",
+    "The map changed. Close and open the map, then try again.": "El mapa ha cambiado. Cierra y abre el mapa y vuelve a intentarlo.",
+    "Can't find the robot on the map": "No encuentro el robot en el mapa",
+    "Can't line the map up with the robot yet. Let it sit still on the dock, then try again.": "Aún no puedo alinear el mapa con el robot. Déjalo quieto en la base y vuelve a intentarlo.",
+    "This robot can't do zone cleaning from Home Assistant.": "Este robot no admite limpieza por zonas desde Home Assistant.",
+    "Wall": "Pared", "Walls": "Paredes", "No-go": "Prohibida", "No-go zones": "Zonas prohibidas", "Save to robot": "Guardar en el robot",
+    "Not saved yet": "Sin guardar", "Nothing saved from here yet": "Aún no se ha guardado nada desde aquí",
+    "Tap the map for a 1 m box, or drag to draw one. Drag a box to move it, drag a white corner to resize it, × removes it.": "Toca el mapa para un recuadro de 1 m, o arrastra para dibujarlo. Arrastra un recuadro para moverlo, una esquina blanca para cambiar su tamaño; × lo quita.",
+    "Tap the map for a 1 m wall, or drag to draw one. Drag a line to move it, drag a white dot to stretch or turn it, × removes it.": "Toca el mapa para una pared de 1 m, o arrastra para dibujarla. Arrastra una línea para moverla, un punto blanco para alargarla o girarla; × la quita.",
+    "Saving replaces": "Al guardar se sustituyen", "walls and no-go zones on this robot, including any drawn in the Roborock app.": "paredes y zonas prohibidas de este robot, incluidas las dibujadas en la app de Roborock.",
+    "It's on the dock. Carry it up first, then press again.": "Está en la base. Súbelo primero y vuelve a pulsar.",
+    // map and rooms
+    "Loading rooms…": "Cargando habitaciones…", "Couldn't load rooms.": "No se pudieron cargar las habitaciones.",
+    "No rooms yet. Name them in the Roborock app.": "Aún no hay habitaciones. Ponles nombre en la app de Roborock.",
+    "The robot didn't take it.": "El robot no lo aceptó.",
+    // care and dock
+    "Main brush": "Cepillo principal", "Side brush": "Cepillo lateral", "Filter": "Filtro", "Sensors": "Sensores", "Dock strainer": "Filtro de la base",
+    "Clean water": "Agua limpia", "Water box": "Depósito de agua", "Mop pads": "Almohadillas", "Mops": "Mopas", "Refill": "Rellenar",
+    "Fitted": "Puestas", "Not fitted": "Sin poner", "Dry": "Secas", "OK": "OK", "Emptied": "Vaciado", "Bin emptied": "Depósito vaciado",
+    "Press Emptied the next time you empty the bin": "Pulsa Vaciado la próxima vez que vacíes el depósito", "Check the dock's tanks.": "Revisa los depósitos de la base.",
+    // schedule
+    "New programme": "Nuevo programa", "Edit programme": "Editar programa", "New": "Nuevo", "Name": "Nombre", "Time": "Hora", "Days": "Días",
+    "Steps (one after another)": "Pasos (uno tras otro)", "Add a step": "Añadir paso", "Passes": "Pasadas", "Once": "Una", "Twice": "Dos",
+    "Save": "Guardar", "Cancel": "Cancelar", "Delete": "Eliminar", "Move up": "Subir", "Remove step": "Quitar paso", "all": "todas",
+    "Every day": "Todos los días", "Weekdays": "Entre semana", "Weekends": "Fines de semana", "Weekend": "Fin de semana", "Morning": "Mañana", "Lunchtime": "Mediodía",
+    "Morning hoover": "Aspirado de la mañana", "Lunchtime kitchen": "Cocina a mediodía", "Weekend deep clean": "Limpieza a fondo del fin de semana",
+    "e.g. Morning hoover": "p. ej. Aspirado de la mañana",
+    "No programmes yet. Start from a suggestion or make your own.": "Aún no hay programas. Empieza con una sugerencia o crea el tuyo.",
+    "Set up separately in Home Assistant": "Configurado aparte en Home Assistant", "Made by the Roborock Buddy Card's schedule. Edit it there.": "Creado por la programación de Roborock Buddy Card. Edítalo allí.",
+    "Mopping needs the dock switched on, so it can wash the pads afterwards.": "Para fregar, la base tiene que estar encendida para lavar las mopas después.",
+    "Give it a name.": "Ponle un nombre.", "Pick at least one day.": "Elige al menos un día.", "Every step needs at least one room.": "Cada paso necesita al menos una habitación.",
+    "Only a Home Assistant admin can change schedules.": "Solo un administrador de Home Assistant puede cambiar la programación.",
+    "Couldn't save": "No se pudo guardar", "Couldn't delete it": "No se pudo eliminar", "Saving…": "Guardando…", "everywhere": "en todas partes",
+    // name your robot
+    "Name your robot": "Ponle nombre a tu robot", "Pick or type a name.": "Elige o escribe un nombre.", "Type your own": "Escribe el tuyo",
+    "Changes the name in Home Assistant. The Roborock app keeps its own name.": "Cambia el nombre en Home Assistant. La app de Roborock mantiene el suyo.",
+    "Funny & puns": "Divertidos", "Cute & pet-inspired": "Tiernos y de mascota", "Formal butlers & classy": "Mayordomos con clase", "Sci-fi & pop culture": "Ciencia ficción y cultura pop",
+    "Find": "Buscar", "Robot": "Robot",
+  },
+  de: {
+    "Cleaning": "Reinigt", "Going home": "Fährt zur Station", "Paused": "Pausiert", "Docked": "In der Station", "Idle": "Bereit",
+    "Needs help": "Braucht Hilfe", "Charging": "Lädt", "Fully charged": "Voll geladen", "Emptying the bin": "Leert den Behälter",
+    "Washing the mops": "Wäscht die Mopps", "Going to wash the mops": "Fährt zum Moppwaschen", "Drying the mops": "Trocknet die Mopps",
+    "Docking": "Dockt an", "Mapping": "Erstellt Karte", "Spot cleaning": "Spot-Reinigung", "Mopping": "Wischt", "Updating": "Aktualisiert",
+    "It's stuck": "Steckt fest", "It's stuck.": "Steckt fest.", "Sort it out, then press Clean all or Dock.": "Beheben und dann Alles reinigen oder Station drücken.",
+    "Clean all": "Alles reinigen", "Pause": "Pause", "Resume": "Fortsetzen", "Dock": "Station", "Rooms": "Räume", "Zone": "Zone",
+    "Pick rooms to clean": "Räume auswählen", "Draw a box on the map": "Rechteck auf der Karte zeichnen", "Map": "Karte",
+    "Draw boxes on the map and clean just those": "Rechtecke auf der Karte zeichnen und nur diese reinigen",
+    "Suction": "Saugstärke", "Clean with": "Reinigen mit", "Mop water": "Wassermenge", "Cleaning pattern": "Reinigungsmuster",
+    "for mopping": "beim Wischen", "Area": "Fläche", "Battery": "Akku", "Care": "Pflege", "Schedule": "Zeitplan",
+    "Vacuum": "Saugen", "Vac + mop": "Saugen + Wischen", "Mop": "Wischen", "Hoover": "Saugen", "Hoover + mop": "Saugen + Wischen",
+    "Quiet": "Leise", "Balanced": "Normal", "Turbo": "Turbo", "Max": "Max", "Max+": "Max+", "Off": "Aus",
+    "Low": "Niedrig", "Medium": "Mittel", "High": "Hoch", "Mild": "Mild", "Moderate": "Mittel", "Intense": "Intensiv",
+    "Standard": "Standard", "Deep": "Gründlich", "Deep+": "Gründlich+", "Fast": "Schnell", "Gentle": "Sanft", "Strong": "Stark",
+    "Tap for a 1 m box, or drag one over the bit to clean": "Tippen für ein 1-m-Rechteck oder über den Bereich ziehen",
+    "Drag another, or press Clean": "Weiteres zeichnen oder Reinigen drücken", "Too small. Drag a bigger box": "Zu klein. Größeres Rechteck ziehen",
+    "Wait till it stops, then press Zone again": "Warten, bis er anhält, dann erneut Zone drücken", "Remove this zone": "Diese Zone entfernen",
+    "The map changed. Press Zone again to redraw.": "Die Karte hat sich geändert. Zone erneut drücken.",
+    "The map changed. Close and open the map, then try again.": "Die Karte hat sich geändert. Karte schließen, öffnen und erneut versuchen.",
+    "Can't find the robot on the map": "Roboter nicht auf der Karte gefunden",
+    "Can't line the map up with the robot yet. Let it sit still on the dock, then try again.": "Karte und Roboter passen noch nicht zusammen. Roboter in der Station stehen lassen und erneut versuchen.",
+    "This robot can't do zone cleaning from Home Assistant.": "Dieser Roboter unterstützt keine Zonenreinigung aus Home Assistant.",
+    "Wall": "Wand", "Walls": "Wände", "No-go": "Sperrzone", "No-go zones": "Sperrzonen", "Save to robot": "Auf Roboter speichern",
+    "Not saved yet": "Noch nicht gespeichert", "Nothing saved from here yet": "Von hier noch nichts gespeichert",
+    "Tap the map for a 1 m box, or drag to draw one. Drag a box to move it, drag a white corner to resize it, × removes it.": "Auf die Karte tippen für ein 1-m-Rechteck oder eines aufziehen. Rechteck ziehen zum Verschieben, weiße Ecke ziehen für die Größe, × entfernt es.",
+    "Tap the map for a 1 m wall, or drag to draw one. Drag a line to move it, drag a white dot to stretch or turn it, × removes it.": "Auf die Karte tippen für eine 1-m-Wand oder eine aufziehen. Linie ziehen zum Verschieben, weißen Punkt ziehen zum Verlängern oder Drehen, × entfernt sie.",
+    "Saving replaces": "Speichern ersetzt", "walls and no-go zones on this robot, including any drawn in the Roborock app.": "Wände und Sperrzonen auf diesem Roboter, auch die in der Roborock-App gezeichneten.",
+    "It's on the dock. Carry it up first, then press again.": "Er steht in der Station. Erst hochtragen, dann erneut drücken.",
+    "Loading rooms…": "Räume werden geladen…", "Couldn't load rooms.": "Räume konnten nicht geladen werden.",
+    "No rooms yet. Name them in the Roborock app.": "Noch keine Räume. Benenne sie in der Roborock-App.",
+    "The robot didn't take it.": "Der Roboter hat es nicht angenommen.",
+    "Main brush": "Hauptbürste", "Side brush": "Seitenbürste", "Filter": "Filter", "Sensors": "Sensoren", "Dock strainer": "Stationssieb",
+    "Clean water": "Frischwasser", "Water box": "Wassertank", "Mop pads": "Wischpads", "Mops": "Mopps", "Refill": "Nachfüllen",
+    "Fitted": "Eingesetzt", "Not fitted": "Nicht eingesetzt", "Dry": "Trocken", "OK": "OK", "Emptied": "Geleert", "Bin emptied": "Behälter geleert",
+    "Press Emptied the next time you empty the bin": "Beim nächsten Leeren des Behälters Geleert drücken", "Check the dock's tanks.": "Tanks der Station prüfen.",
+    "New programme": "Neues Programm", "Edit programme": "Programm bearbeiten", "New": "Neu", "Name": "Name", "Time": "Uhrzeit", "Days": "Tage",
+    "Steps (one after another)": "Schritte (nacheinander)", "Add a step": "Schritt hinzufügen", "Passes": "Durchgänge", "Once": "Einmal", "Twice": "Zweimal",
+    "Save": "Speichern", "Cancel": "Abbrechen", "Delete": "Löschen", "Move up": "Nach oben", "Remove step": "Schritt entfernen", "all": "alle",
+    "Every day": "Täglich", "Weekdays": "Werktags", "Weekends": "Am Wochenende", "Weekend": "Wochenende", "Morning": "Morgens", "Lunchtime": "Mittags",
+    "Morning hoover": "Morgens saugen", "Lunchtime kitchen": "Küche am Mittag", "Weekend deep clean": "Großputz am Wochenende",
+    "e.g. Morning hoover": "z. B. Morgens saugen",
+    "No programmes yet. Start from a suggestion or make your own.": "Noch keine Programme. Starte mit einem Vorschlag oder erstelle eins.",
+    "Set up separately in Home Assistant": "Separat in Home Assistant eingerichtet", "Made by the Roborock Buddy Card's schedule. Edit it there.": "Vom Zeitplan der Roborock Buddy Card erstellt. Dort bearbeiten.",
+    "Mopping needs the dock switched on, so it can wash the pads afterwards.": "Zum Wischen muss die Station eingeschaltet sein, damit sie die Mopps danach waschen kann.",
+    "Give it a name.": "Gib ihm einen Namen.", "Pick at least one day.": "Wähle mindestens einen Tag.", "Every step needs at least one room.": "Jeder Schritt braucht mindestens einen Raum.",
+    "Only a Home Assistant admin can change schedules.": "Nur ein Home-Assistant-Admin kann Zeitpläne ändern.",
+    "Couldn't save": "Speichern fehlgeschlagen", "Couldn't delete it": "Löschen fehlgeschlagen", "Saving…": "Speichert…", "everywhere": "überall",
+    "Name your robot": "Gib deinem Roboter einen Namen", "Pick or type a name.": "Wähle oder tippe einen Namen.", "Type your own": "Eigenen eingeben",
+    "Changes the name in Home Assistant. The Roborock app keeps its own name.": "Ändert den Namen in Home Assistant. Die Roborock-App behält ihren eigenen.",
+    "Funny & puns": "Lustig & Wortspiele", "Cute & pet-inspired": "Niedlich & tierisch", "Formal butlers & classy": "Butler & edel", "Sci-fi & pop culture": "Sci-Fi & Popkultur",
+    "Find": "Suchen", "Robot": "Roboter",
+  },
+};
+// robot and dock error codes from Home Assistant's Roborock integration (shown as "main brush jammed" etc.)
+const I18N_ERR = {
+  es: { "main brush jammed": "cepillo principal atascado", "side brush jammed": "cepillo lateral atascado", "side brush error": "error del cepillo lateral",
+    "wheels jammed": "ruedas atascadas", "wheels suspended": "ruedas en el aire", "bumper stuck": "parachoques atascado", "robot trapped": "robot atrapado",
+    "robot tilted": "robot inclinado", "lidar blocked": "láser bloqueado", "cliff sensor error": "error del sensor de desnivel", "no dustbin": "sin depósito de polvo",
+    "low battery": "batería baja", "charging error": "error de carga", "battery error": "error de batería", "wall sensor dirty": "sensor de pared sucio",
+    "fan error": "error del ventilador", "filter blocked": "filtro obstruido", "return to dock fail": "no pudo volver a la base", "nogo zone detected": "zona prohibida detectada",
+    "invisible wall detected": "pared virtual detectada", "cannot cross carpet": "no puede cruzar la alfombra", "robot on carpet": "robot sobre alfombra",
+    "internal error": "error interno", "optical flow sensor dirt": "sensor óptico sucio", "vertical bumper pressed": "parachoques superior pulsado", "dock": "base",
+    "water empty": "sin agua", "waste water tank full": "depósito de agua sucia lleno", "duct blockage": "conducto obstruido", "dirty tank latch open": "cierre del depósito sucio abierto",
+    "cleaning tank full or blocked": "depósito de limpieza lleno u obstruido", "maintenance brush jammed": "cepillo de mantenimiento atascado" },
+  de: { "main brush jammed": "Hauptbürste blockiert", "side brush jammed": "Seitenbürste blockiert", "side brush error": "Fehler der Seitenbürste",
+    "wheels jammed": "Räder blockiert", "wheels suspended": "Räder in der Luft", "bumper stuck": "Stoßstange klemmt", "robot trapped": "Roboter eingeklemmt",
+    "robot tilted": "Roboter gekippt", "lidar blocked": "Laser blockiert", "cliff sensor error": "Fehler des Absturzsensors", "no dustbin": "kein Staubbehälter",
+    "low battery": "Akku schwach", "charging error": "Ladefehler", "battery error": "Akkufehler", "wall sensor dirty": "Wandsensor verschmutzt",
+    "fan error": "Lüfterfehler", "filter blocked": "Filter verstopft", "return to dock fail": "Rückkehr zur Station fehlgeschlagen", "nogo zone detected": "Sperrzone erkannt",
+    "invisible wall detected": "virtuelle Wand erkannt", "cannot cross carpet": "kann Teppich nicht überqueren", "robot on carpet": "Roboter auf Teppich",
+    "internal error": "interner Fehler", "optical flow sensor dirt": "optischer Sensor verschmutzt", "vertical bumper pressed": "obere Stoßstange gedrückt", "dock": "Station",
+    "water empty": "Wasser leer", "waste water tank full": "Schmutzwassertank voll", "duct blockage": "Leitung verstopft", "dirty tank latch open": "Verschluss des Schmutzwassertanks offen",
+    "cleaning tank full or blocked": "Reinigungstank voll oder verstopft", "maintenance brush jammed": "Wartungsbürste blockiert" },
+};
+const I18N_DAYS = { es: { mon: ["L", "lun"], tue: ["M", "mar"], wed: ["X", "mié"], thu: ["J", "jue"], fri: ["V", "vie"], sat: ["S", "sáb"], sun: ["D", "dom"] },
+  de: { mon: ["M", "Mo"], tue: ["D", "Di"], wed: ["M", "Mi"], thu: ["D", "Do"], fri: ["F", "Fr"], sat: ["S", "Sa"], sun: ["S", "So"] } };
+// pieces of text that are put together from parts: [pattern, Spanish, German]; $1, $2 are the parts
+const I18N_PAT = [
+  [/^Clean 1 room$/, "Limpiar 1 habitación", "1 Raum reinigen"], [/^Clean (\d+) rooms$/, "Limpiar $1 habitaciones", "$1 Räume reinigen"],
+  [/^Clean 1 zone$/, "Limpiar 1 zona", "1 Zone reinigen"], [/^Clean (\d+) zones$/, "Limpiar $1 zonas", "$1 Zonen reinigen"],
+  [/^Step (\d+)$/, "Paso $1", "Schritt $1"], [/^Live · (.+)$/, "En directo · $1", "Live · $1"],
+  [/^Last run · today$/, "Última · hoy", "Zuletzt · heute"], [/^Last run · yday$/, "Última · ayer", "Zuletzt · gestern"], [/^Last run · (.+)$/, "Última · $1", "Zuletzt · $1"],
+  [/^Drying, (.+) left$/, "Secando, quedan $1", "Trocknet, noch $1"],
+  [/^That's (\d+), the most it takes$/, "Son $1, el máximo que admite", "Das sind $1, mehr geht nicht"],
+  [/^Saved to the robot (.+)$/, "Guardado en el robot el $1", "Auf dem Roboter gespeichert am $1"],
+  [/^Saved: (\d+) no-go zones?, (\d+) walls?\. Check the Roborock app map\.$/, "Guardado. Zonas prohibidas: $1, paredes: $2. Revisa el mapa en la app de Roborock.", "Gespeichert. Sperrzonen: $1, Wände: $2. Karte in der Roborock-App prüfen."],
+  [/^Empty the bin: (\d+) runs since it was last emptied$/, "Vacía el depósito: $1 limpiezas desde que se vació", "Behälter leeren: $1 Reinigungen seit dem letzten Leeren"],
+  [/^(\d+) runs? since the bin was emptied$/, "Limpiezas desde que se vació el depósito: $1", "Reinigungen seit dem Leeren: $1"],
+  [/^Couldn't send that: (.+)$/, "No se pudo enviar: $1", "Senden fehlgeschlagen: $1"],
+  [/^No map yet\. Let the robot finish a mapping run(.*)\.$/, "Aún no hay mapa. Deja que el robot termine un recorrido de mapeo$1.", "Noch keine Karte. Lass den Roboter eine Kartierungsfahrt beenden$1."],
+  [/^Mopping needs the dock switched on, so it can wash the pads afterwards\. Yours has power (.+)\.$/, "Para fregar, la base tiene que estar encendida para lavar las mopas después. La tuya tiene corriente $1.", "Zum Wischen muss die Station eingeschaltet sein, damit sie die Mopps danach waschen kann. Deine hat Strom $1."],
+];
+function i18nLang(cfg, hass) {
+  const l = String(cfg?.language || hass?.locale?.language || hass?.language || "en").toLowerCase().slice(0, 2);
+  return I18N[l] ? l : "";
+}
+// translate one piece of the card's text (returns it unchanged when there's nothing to do)
+function i18nText(t, l) {
+  if (!l || !t) return t;
+  const lead = t.match(/^\s*/)[0], tail = t.match(/\s*$/)[0], s = t.trim();
+  if (!s) return t;
+  const D = I18N[l], E = I18N_ERR[l], col = l === "es" ? 1 : 2;
+  const one = x => {
+    if (D[x] !== undefined) return D[x];
+    const lo = x.toLowerCase();
+    if (E[lo] !== undefined) return x[0] === x[0].toUpperCase() && x[0] !== x[0].toLowerCase() ? E[lo][0].toUpperCase() + E[lo].slice(1) : E[lo];
+    const dot = x.match(/^(.+)\.$/); if (dot && E[dot[1].toLowerCase()] !== undefined) return one(dot[1]) + ".";
+    const dk = x.match(/^Dock: (.+)\.$/); if (dk) return (l === "es" ? "Base: " : "Station: ") + one(dk[1]) + ".";
+    for (const p of I18N_PAT) { const m = x.match(p[0]); if (m) return p[col].replace(/\$(\d)/g, (_, i) => m[+i] ?? ""); }
+    // day lists like "Mon, Wed, Fri"
+    if (/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)(, (Mon|Tue|Wed|Thu|Fri|Sat|Sun))*$/.test(x)) return x.split(", ").map(d => I18N_DAYS[l][d.toLowerCase()][1]).join(", ");
+    // schedule step lines: "1. Hoover everywhere · Deep+ ×2 → 2. Mop Kitchen, Hall"
+    if (/^\d+\. /.test(x) || /^(Hoover \+ mop|Hoover|Mop) /.test(x)) {
+      const step = y => { const m = y.match(/^(\d+\. )?(Hoover \+ mop|Hoover|Mop) (everywhere|.+?)( · (.+?))?( ×\d+)?$/);
+        return m ? `${m[1] || ""}${D[m[2]]} ${m[3] === "everywhere" ? D.everywhere : m[3]}${m[5] ? " · " + (D[m[5]] || m[5]) : ""}${m[6] || ""}` : y; };
+      return x.split(" → ").map(step).join(" → ");
+    }
+    return null;
+  };
+  let r = one(s);
+  if (r === null && /^· /.test(s)) { const inner = one(s.slice(2)); r = inner === null ? null : "· " + inner; }
+  return r === null ? t : lead + r + tail;
+}
+// walk the card's text and the attributes people can see (button titles, box placeholders) and translate them
+function i18nTree(root, l) {
+  if (!l || !root) return;
+  const days = I18N_DAYS[l];
+  const visit = n => {
+    if (n.nodeType === 3) {
+      const v = n.nodeValue;
+      // "Time" on the cleaning-time tile is a duration; in the schedule it's the time of day
+      const w = v.trim() === "Time" && n.parentNode?.closest?.(".stat") ? (l === "es" ? "Tiempo" : "Dauer") : i18nText(v, l);
+      if (w !== v) n.nodeValue = w; return;
+    }
+    if (n.nodeType !== 1 && n.nodeType !== 11) return;
+    if (n.nodeType === 1) {
+      const tag = n.tagName;
+      if (tag === "STYLE" || tag === "SCRIPT" || tag === "svg" || tag === "SVG") return;
+      for (const a of ["title", "placeholder", "aria-label", "alt"]) {
+        const v = n.getAttribute(a); if (!v) continue;
+        if (a === "title" && days[v]) { if (n.textContent.trim().length <= 1) n.textContent = days[v][0]; n.setAttribute("title", days[v][1]); continue; }
+        const w = i18nText(v, l); if (w !== v) n.setAttribute(a, w);
+      }
+    }
+    n.childNodes.forEach(visit);
+  };
+  visit(root);
+}
+const I18N_OBS = { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["title", "placeholder", "aria-label", "alt"] };
+
 class RobotVacCard extends HTMLElement {
   constructor() { super(); this._config = {}; this._sel = new Set(); this._rooms = null; }
   setConfig(c) { this._config = { bin_every: 2, ...c }; }
+  // languages: translate the card's own text after it draws, and keep watching for anything it redraws
+  _i18nWatch(r) {
+    if (!this._mo) this._mo = new MutationObserver(recs => {
+      if (!this._lang) return;
+      this._mo.disconnect();
+      for (const m of recs) { if (m.type === "childList") m.addedNodes.forEach(n => i18nTree(n, this._lang)); else i18nTree(m.target.nodeType === 3 ? m.target.parentNode : m.target, this._lang); }
+      this._mo.observe(this.shadowRoot, I18N_OBS);
+    });
+    const l = i18nLang(this._config, this._hass); this._lang = l;
+    this._mo.disconnect();
+    if (l) { i18nTree(r, l); this._mo.observe(r, I18N_OBS); }
+    this._i18nOn = !!l;
+  }
   getCardSize() { return 10; }
   static getStubConfig() { return {}; }
   set hass(h) { this._hass = h; this._render(); }
@@ -375,6 +606,7 @@ class RobotVacCard extends HTMLElement {
 
   _build() {
     const r = this.shadowRoot || this.attachShadow({ mode: "open" });
+    this._i18nWatch(r);
     const C = 2 * Math.PI * 24;
     r.innerHTML = `<style>${CSS}${SCHED_CSS}</style><ha-card id="card">
       <div class="head">
@@ -845,9 +1077,11 @@ class RobotVacCard extends HTMLElement {
 
   _render() {
     const h = this._hass; if (!h) return;
+    // a different language: draw the card again from scratch (in English), so nothing is left in the old language
+    if (this.shadowRoot && i18nLang(this._config, h) !== (this._lang || "")) { this._lang = i18nLang(this._config, h); this._i18nOn = false; this._built = false; }
     this._v = this._vac();
     if (!this._v) {
-      const r = this.shadowRoot || this.attachShadow({ mode: "open" }); this._built = false;
+      const r = this.shadowRoot || this.attachShadow({ mode: "open" }); this._built = false; this._i18nWatch(r);
       r.innerHTML = `<style>${CSS}</style><ha-card><div class="head"><div class="title"><div class="name">${esc(this._config.name || "Vacuum")}</div></div></div>
         <div class="setup">Waiting for the robot. Add it in Settings → Devices &amp; services → Add integration → Roborock.</div></ha-card>`;
       return;
@@ -1174,7 +1408,7 @@ const SchedMixin = {
     m.querySelector("#ssave").onclick = () => { keep(); this._schedSave(p); };
     if (p.id) {
       m.querySelector("#sdel").onclick = async () => {
-        if (!confirm(`Delete "${p.name}"?`)) return;
+        if (!confirm(this._lang === "es" ? `¿Eliminar "${p.name}"?` : this._lang === "de" ? `"${p.name}" löschen?` : `Delete "${p.name}"?`)) return;
         try { await this._hass.callApi("DELETE", `config/automation/config/${p.id}`); await new Promise(r => setTimeout(r, 600)); await this._schedLoad(); this._schedClose(); }
         catch (x) { m.querySelector("#serr").textContent = `Couldn't delete it: ${x.message || x.body?.message || x}`; }
       };
