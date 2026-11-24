@@ -8,7 +8,7 @@
 //
 // type: custom:roborock-buddy-card   (every option is optional - see the README)
 // Languages: English, Spanish and German. It follows Home Assistant's language, or set  language: es | de | en
-const ROBOROCK_BUDDY_VERSION = "0.5.0";
+const ROBOROCK_BUDDY_VERSION = "0.5.1";
 
 // Roborock's own replacement intervals, in hours
 const LIFE = { main_brush: ["Main brush", 300, "mdi:brush"], side_brush: ["Side brush", 200, "mdi:fan"], filter: ["Filter", 150, "mdi:air-filter"],
@@ -1163,12 +1163,12 @@ class RobotVacCard extends HTMLElement {
 
     // mop: the Roborock integration's own selects on this device
     const segSel = (boxId, id) => {
-      const s = this._st(id); if (!s) { r.getElementById(boxId).innerHTML = ""; r.getElementById(boxId).dataset.k = ""; return false; }
+            const s = id && this._hass.states[id]; if (!s || s.state === "unavailable") { r.getElementById(boxId).innerHTML = ""; r.getElementById(boxId).dataset.k = ""; return false; }
       this._seg(boxId, s.attributes.options || [], s.state, o => this._call("select", "select_option", { option: o }, { entity_id: id }));
       return true;
     };
     const cmId = this._find("select", /cleaning_mode/), mc = segSel("mopc", cmId);
-    const mopping = !mc || this._st(cmId).state !== "vacuum";   // water + route only matter when it mops
+        const mopping = !mc || this._st(cmId)?.state !== "vacuum";   // water + route only matter when it mops
     const mi = segSel("mopi", this._find("select", /mop_intensity/)), mm = segSel("mopm", this._find("select", /mop_mode/));
     r.getElementById("mopbox").hidden = !mc;
     r.getElementById("mopbox2").hidden = !(mopping && mi);
