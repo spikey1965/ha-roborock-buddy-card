@@ -8,7 +8,7 @@
 //
 // type: custom:roborock-buddy-card   (every option is optional - see the README)
 // Languages: English, Spanish and German. It follows Home Assistant's language, or set  language: es | de | en
-const ROBOROCK_BUDDY_VERSION = "0.5.1";
+const ROBOROCK_BUDDY_VERSION = "0.5.2";
 
 // Roborock's own replacement intervals, in hours
 const LIFE = { main_brush: ["Main brush", 300, "mdi:brush"], side_brush: ["Side brush", 200, "mdi:fan"], filter: ["Filter", 150, "mdi:air-filter"],
@@ -602,6 +602,27 @@ class RobotVacCard extends HTMLElement {
       && (re.test(x.translation_key || "") || re.test(x.entity_id)))?.entity_id;
   }
   _st(id) { const s = id && this._hass.states[id]; return s && !["unknown", "unavailable"].includes(s.state) ? s : null; }
+  // Some robots (e.g. Saros 20) have no cleaning_mode select. Their "vacuum only" is mop intensity "off", so the card offers
+  // Clean with: Vacuum / Vac + mop on that select instead. Returns its entity id, or null when cleaning_mode exists or "off" isn't offered.
+  _waterMode() {
+    if (this._find("select", /cleaning_mode/)) return null;
+    const id = this._find("select", /mop_intensity/), s = id && this._hass.states[id];
+    return s && (s.attributes.options || []).includes("off") ? id : null;
+  }
+  // the mop water to go back to for Vac + mop: the last one used on this robot, else medium, else the first real option
+  _lastWater(id) {
+    const s = this._hass.states[id], opts = (s?.attributes.options || []).filter(o => !HIDE.has(o));
+    let w = null; try { w = localStorage.getItem("rbb-water-" + id); } catch (e) {}
+    return opts.includes(w) ? w : opts.includes("medium") ? "medium" : opts[0];
+  }
+  async _setMode(mode) {
+    const cm = this._find("select", /cleaning_mode/);
+    if (cm) { if (this._hass.states[cm]?.state !== mode) return this._call("select", "select_option", { option: mode }, { entity_id: cm }); return true; }
+    const wm = this._waterMode(); if (!wm) return true;
+    const now = this._hass.states[wm]?.state;
+    const want = mode === "vacuum" ? (now === "off" ? null : "off") : (now !== "off" && this._st(wm) ? null : this._lastWater(wm));
+    return want ? this._call("select", "select_option", { option: want }, { entity_id: wm }) : true;
+  }
   _fmt(id) { const s = this._st(id); return s ? (this._hass.formatEntityState?.(s) ?? `${s.state} ${s.attributes.unit_of_measurement || ""}`) : "–"; }
 
   _build() {
@@ -706,7 +727,7 @@ class RobotVacCard extends HTMLElement {
   async _prep() {
     const c = this._config, e = this.shadowRoot.getElementById("err");
     if (c.carry && this._hass.states[this._v]?.state === "docked") { e.textContent = "It's on the dock. Carry it up first, then press again."; return false; }
-    if (c.mode) { const cm = this._find("select", /cleaning_mode/); if (cm && this._st(cm)?.state !== c.mode) await this._call("select", "select_option", { option: c.mode }, { entity_id: cm }); }
+    if (c.mode) await this._setMode(c.mode);
     if (c.map) {
       const sel = this._find("select", /selected_map/);
       if (sel && this._st(sel)?.state !== c.map) {
@@ -1167,8 +1188,17 @@ class RobotVacCard extends HTMLElement {
       this._seg(boxId, s.attributes.options || [], s.state, o => this._call("select", "select_option", { option: o }, { entity_id: id }));
       return true;
     };
-    const cmId = this._find("select", /cleaning_mode/), mc = segSel("mopc", cmId);
-        const mopping = !mc || this._st(cmId)?.state !== "vacuum";   // water + route only matter when it mops
+    const cmId = this._find("select", /cleaning_mode/), wmId = !cmId && this._waterMode();
+    let mc, mopping;
+    if (wmId) {   // no cleaning_mode select: Vacuum = mop intensity off, Vac + mop = back to the last water level
+      const ws = this._hass.states[wmId].state, cur = ws === "off" ? "vacuum" : this._st(wmId) ? "vac_and_mop" : "";
+      if (cur === "vac_and_mop") { try { localStorage.setItem("rbb-water-" + wmId, ws); } catch (e) {} }
+      this._seg("mopc", ["vacuum", "vac_and_mop"], cur, o => this._setMode(o));
+      mc = true; mopping = ws !== "off";
+    } else {
+      mc = segSel("mopc", cmId);
+      mopping = !mc || this._st(cmId)?.state !== "vacuum";   // water + route only matter when it mops
+    }
     const mi = segSel("mopi", this._find("select", /mop_intensity/)), mm = segSel("mopm", this._find("select", /mop_mode/));
     r.getElementById("mopbox").hidden = !mc;
     r.getElementById("mopbox2").hidden = !(mopping && mi);
@@ -1375,12 +1405,12 @@ const SchedMixin = {
     const waters = (this._st(this._find("select", /mop_intensity/))?.attributes.options || []).filter(o => !HIDE.has(o));
     const routes = (this._st(this._find("select", /mop_mode/))?.attributes.options || []).filter(o => !HIDE.has(o));
     p.steps.forEach(s => { if (s.mode !== "vacuum" && routes.length && !routes.includes(s.route)) s.route = routes.includes("standard") ? "standard" : routes[0]; });
-    const canMop = !!this._find("select", /cleaning_mode/);
+    const canMop = !!this._find("select", /cleaning_mode/) || !!this._waterMode(), modes = this._find("select", /cleaning_mode/) ? MODES : MODES.filter(([m]) => m !== "mop");
     const chips = (key, i, opts, cur, icons) => `<div class="chipset">${opts.map(([v, t, ic]) => `<button data-k="${key}" data-i="${i}" data-v="${esc(v)}" class="${String(v) === String(cur) ? "on" : ""}">${ic ? `<ha-icon icon="${ic}"></ha-icon>` : ""}${esc(t)}</button>`).join("")}</div>`;
     const steps = p.steps.map((s, i) => `<div class="step"><div class="sh"><span>Step ${i + 1}</span>
         ${i ? `<button data-up="${i}" title="Move up"><ha-icon icon="mdi:arrow-up"></ha-icon></button>` : ""}${p.steps.length > 1 ? `<button data-rm="${i}" title="Remove step"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>` : ""}</div>
       <div><small>Rooms</small><div class="chipset">${(this._rooms || []).map(([id, n]) => `<button data-room="${id}" data-i="${i}" class="${s.rooms.includes(Number(id)) ? "on" : ""}"><ha-icon icon="${roomIcon(n)}"></ha-icon>${esc(n)}</button>`).join("")}</div></div>
-      ${canMop ? `<div><small>Clean with</small>${chips("mode", i, MODES, s.mode)}</div>` : ""}
+      ${canMop ? `<div><small>Clean with</small>${chips("mode", i, modes, s.mode)}</div>` : ""}
       <div class="row2">${s.mode !== "mop" ? `<div class="wide"><small>Suction</small>${chips("fan", i, fans.map(f => [f, nice(f), ICON[f]]), s.fan)}</div>` : ""}
         ${s.mode !== "vacuum" && waters.length ? `<div><small>Mop water</small>${chips("water", i, waters.map(w => [w, nice(w), ICON[w]]), s.water)}</div>` : ""}
         ${s.mode !== "vacuum" && routes.length ? `<div><small>Cleaning pattern</small>${chips("route", i, routes.map(o => [o, nice(o), ICON[o]]), s.route)}</div>` : ""}
@@ -1430,7 +1460,7 @@ const SchedMixin = {
   // the automation that runs a programme
   _schedAutomation(p) {
     const V = this._v, ent = re => this._find("select", re), status = this._find("sensor", /(^|\.|_)status$/), map = this._config.map;
-    const cm = ent(/cleaning_mode/), mi = ent(/mop_intensity/), mm = ent(/mop_mode/), sel = ent(/selected_map/), dry = this._find("switch", /mop_drying/);
+    const cm = ent(/cleaning_mode/), mi = ent(/mop_intensity/), mm = ent(/mop_mode/), sel = ent(/selected_map/), dry = this._find("switch", /mop_drying/), wm = this._waterMode();
     const q7 = this._isQ7();   // Q7: its status names differ, so wait on the vacuum itself being docked for 90 s
     const settled = q7 || !status ? `{{ is_state('${V}','docked') and (now() - states.${V}.last_changed).total_seconds() > 90 }}`
       : `{{ is_state('${V}','docked') and states('${status}') in ['charging','charging_complete','idle'] and (now() - states.${status}.last_changed).total_seconds() > 90 }}`;
@@ -1443,6 +1473,7 @@ const SchedMixin = {
     p.steps.forEach((s, i) => {
       if (i) seq.push({ delay: "00:00:30" });
       if (cm) seq.push({ action: "select.select_option", target: { entity_id: cm }, data: { option: s.mode } });
+      else if (wm && s.mode === "vacuum") seq.push({ action: "select.select_option", target: { entity_id: wm }, data: { option: "off" } });   // no cleaning_mode: vacuum only = mop water off
       if (s.mode !== "mop") seq.push({ action: "vacuum.set_fan_speed", target: { entity_id: V }, data: { fan_speed: s.fan } });
       if (s.mode !== "vacuum" && mi) seq.push({ action: "select.select_option", target: { entity_id: mi }, data: { option: s.water } });
       if (s.mode !== "vacuum" && mm && s.route) seq.push({ action: "select.select_option", target: { entity_id: mm }, data: { option: s.route } });
